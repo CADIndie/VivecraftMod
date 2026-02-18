@@ -44,7 +44,7 @@ public abstract class GuiListScreen extends Screen {
         double scrollAmount = this.list != null ? this.list.scrollAmount() : 0.0D;
         String filter = this.list != null ? this.list.getActiveFilter() : "";
 
-        this.list = new SettingsList(this, this.minecraft, getEntries(), this.searchable);
+        this.list = new SettingsList(this, this.minecraft, width, height - (searchable ? 74 : 52), searchable ? 42 : 20, getEntries());
 
         if (this.searchable) {
             this.list.filter(filter);
