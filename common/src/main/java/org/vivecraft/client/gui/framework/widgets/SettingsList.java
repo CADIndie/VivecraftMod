@@ -44,10 +44,10 @@ public class SettingsList extends ContainerObjectSelectionList<SettingsList.Base
 
     private final Screen parent;
 
-    public SettingsList(Screen parent, Minecraft minecraft, List<SettingsList.BaseEntry> entries, boolean searchable) {
+    public SettingsList(Screen parent, Minecraft minecraft, int width, int height, int top, List<BaseEntry> entries) {
         // arguments are
         // width, height, Y position, entry height
-        super(minecraft, parent.width, parent.height - (searchable ? 74 : 52), searchable ? 42 : 20, 20);
+        super(minecraft, width, height, top, 20);
 
         this.parent = parent;
         entries = entries.stream().filter(Objects::nonNull).toList();
@@ -138,7 +138,7 @@ public class SettingsList extends ContainerObjectSelectionList<SettingsList.Base
 
     @Override
     public int getRowWidth() {
-        return Math.min(this.parent.width - 30, 350);
+        return Math.min(this.width - 10, 350);
     }
 
     @Override
