@@ -352,7 +352,7 @@ public class MCOpenXR extends MCVR<XRInputAction> {
                     continue;
                 }
                 switch (handedAction.action()) {
-                    case BOOLEAN, DOUBLE_PRESS, LONG_PRESS, HOLD, TOGGLE ->
+                    case PRESS, DOUBLE_PRESS, LONG_PRESS, HOLD, TOGGLE ->
                         this.readBoolean(action, handedAction.hand(), i);
 
                     case VEC1 -> this.readFloat(action, handedAction.hand(), i);
@@ -1203,6 +1203,7 @@ public class MCOpenXR extends MCVR<XRInputAction> {
             }
 
             for (BindingProfile profile : profilesToLoad) {
+                if (profile.controller_paths() == null) continue;
                 String headsetPath = profile.controller_paths().openxr();
                 VRSettings.LOGGER.info("Loading interaction profile: {}", profile.name());
                 int bindingIndex = 0;
@@ -1213,9 +1214,9 @@ public class MCOpenXR extends MCVR<XRInputAction> {
 
                     for (Source source : sources) {
                         for (Action action : source.inputs()) {
-                            XRInputAction inputAction = this.getInputActionByName(action.output());
+                            XRInputAction inputAction = this.getInputActionByName("/actions/" + set.getKey() + "/in/" + action.action());
                             if (inputAction == null) {
-                                VRSettings.LOGGER.warn("Input action '{}' not found", action.output());
+                                VRSettings.LOGGER.warn("Input action '{}' not found", "/actions/" + set.getKey() + "/in/" + action.action());
                                 continue;
                             }
                             long handle = this.mappedBindings.get(new ActionBind(inputAction.actionSet, source.path()));
@@ -1230,7 +1231,7 @@ public class MCOpenXR extends MCVR<XRInputAction> {
                             inputAction.setType(action.type());
 
                             if (inputAction.getHandle(headsetPath).isEmpty() || handle == 0L) {
-                                VRSettings.LOGGER.error("Handle for '{}'/'{}' is null", action.output(), source.path());
+                                VRSettings.LOGGER.error("Handle for '{}'/'{}' is null", "/actions/" + set.getKey() + "/in/" + action.action(), source.path());
                                 continue;
                             }
 
@@ -1243,7 +1244,7 @@ public class MCOpenXR extends MCVR<XRInputAction> {
                         }
                     }
 
-                    XrActionSet actionSet = new XrActionSet(this.actionSetHandles.get(VRInputActionSet.getByName(set.getKey())), this.instance);
+                    XrActionSet actionSet = new XrActionSet(this.actionSetHandles.get(VRInputActionSet.getByName("/actions/" + set.getKey())), this.instance);
                     String[] hands = {"/user/hand/right", "/user/hand/left"};
                     long[] poses = {this.grip[RIGHT_CONTROLLER], this.grip[LEFT_CONTROLLER], this.aim[RIGHT_CONTROLLER], this.aim[LEFT_CONTROLLER]};
                     long[] haptics = {this.haptics[RIGHT_CONTROLLER], this.haptics[LEFT_CONTROLLER]};
@@ -1361,7 +1362,7 @@ public class MCOpenXR extends MCVR<XRInputAction> {
             hands.next(MemoryUtil.NULL);
             hands.actionName(MemoryUtil.memUTF8(s));
             switch (type) {
-                case BOOLEAN, DOUBLE_PRESS, LONG_PRESS, HOLD, TOGGLE ->
+                case PRESS, DOUBLE_PRESS, LONG_PRESS, HOLD, TOGGLE ->
                     hands.actionType(XR10.XR_ACTION_TYPE_BOOLEAN_INPUT);
                 case VEC1 -> hands.actionType(XR10.XR_ACTION_TYPE_FLOAT_INPUT);
                 case VEC2 -> hands.actionType(XR10.XR_ACTION_TYPE_VECTOR2F_INPUT);
