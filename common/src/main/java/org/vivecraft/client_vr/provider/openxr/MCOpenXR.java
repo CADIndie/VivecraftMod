@@ -3,8 +3,10 @@ package org.vivecraft.client_vr.provider.openxr;
 import com.google.common.collect.HashBiMap;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.util.Mth;
 import net.minecraft.util.profiling.Profiler;
 import org.joml.Matrix4f;
+import org.joml.Matrix4fc;
 import org.joml.Vector2f;
 import org.joml.Vector3f;
 import org.lwjgl.PointerBuffer;
@@ -25,6 +27,7 @@ import org.vivecraft.client_vr.provider.openxr.control.ControllerMapping;
 import org.vivecraft.client_vr.provider.openxr.control.XRInputAction;
 import org.vivecraft.client_vr.render.RenderConfigException;
 import org.vivecraft.client_vr.settings.VRSettings;
+import org.vivecraft.common.utils.MathUtils;
 import oshi.util.tuples.Pair;
 
 import java.io.FileNotFoundException;
@@ -336,6 +339,22 @@ public class MCOpenXR extends MCVR<XRInputAction> {
                 } else {
                     this.controllerTracking[LEFT_CONTROLLER] = false;
                 }
+            }
+
+            if(this.controllerTracking[RIGHT_CONTROLLER]) {
+                Matrix4fc tip = this.controllerRotation[RIGHT_CONTROLLER];
+                Matrix4fc hand = this.handRotation[RIGHT_CONTROLLER];
+
+                Vector3f tipVec = tip.transformDirection(MathUtils.BACK, new Vector3f());
+                Vector3f handVec = hand.transformDirection(MathUtils.BACK, new Vector3f());
+
+                float dot = Math.abs(tipVec.dot(handVec));
+
+                float angleRad = (float) Math.acos(dot);
+                float angleDeg = Mth.RAD_TO_DEG * angleRad;
+
+                this.gunStyle = angleDeg > 10.0F;
+                this.gunAngle = angleDeg;
             }
 
             this.updateAim();
@@ -974,9 +993,86 @@ public class MCOpenXR extends MCVR<XRInputAction> {
             error = XR10.xrEnumerateViewConfigurationViews(this.instance, this.systemID,
                 XR10.XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO, intBuf, this.viewConfigurationBuffer);
             logError(error, "xrEnumerateViewConfigurationViews", "get views");
+            int viewCountNumber = intBuf.get(0);
 
-            this.viewCount = intBuf.get(0);
-            this.viewBuffer = new XrView.Buffer(bufferHeap(this.viewCount, XrView.SIZEOF, XR10.XR_TYPE_VIEW));
+            this.viewBuffer = new XrView.Buffer(
+                bufferHeap(viewCountNumber, XrView.SIZEOF, XR10.XR_TYPE_VIEW)
+            );
+            // Check swapchain formats
+            error = XR10.xrEnumerateSwapchainFormats(this.session, intBuf, null);
+            logError(error, "xrEnumerateSwapchainFormats", "get count");
+
+            // Get swapchain formats
+            LongBuffer swapchainFormats = stack.callocLong(intBuf.get(0));
+            error = XR10.xrEnumerateSwapchainFormats(this.session, intBuf, swapchainFormats);
+            logError(error, "xrEnumerateSwapchainFormats", "get formats");
+
+            long[] desiredSwapchainFormats;
+            if (this.device.getClass() == DeviceCompat.Desktop.class) {
+                desiredSwapchainFormats = new long[] {
+                    // SRGB formats
+                    GL21.GL_SRGB8_ALPHA8,
+                    GL21.GL_SRGB8,
+                    // others
+                    GL11.GL_RGB10_A2,
+                    GL30.GL_RGBA16F,
+                    GL30.GL_RGB16F,
+
+                    // The two below should only be used as a fallback, as they are linear color formats without enough bits for color
+                    // depth, thus leading to banding.
+                    GL11.GL_RGBA8,
+                    GL31.GL_RGBA8_SNORM
+                };
+            } else {
+                // Mobile runtimes tend to over-correct SRGB for some reason
+                desiredSwapchainFormats = new long[] {GL11.GL_RGBA8};
+            }
+
+            // Choose format
+            long chosenFormat = 0;
+            for (long glFormatIter : desiredSwapchainFormats) {
+                swapchainFormats.rewind();
+                while (swapchainFormats.hasRemaining()) {
+                    if (glFormatIter == swapchainFormats.get()) {
+                        chosenFormat = glFormatIter;
+                        break;
+                    }
+                }
+                if (chosenFormat != 0) {
+                    break;
+                }
+            }
+
+            if (chosenFormat == 0) {
+                var formats = new ArrayList<Long>();
+                swapchainFormats.rewind();
+                while (swapchainFormats.hasRemaining()) {
+                    formats.add(swapchainFormats.get());
+                }
+                throw new RuntimeException("No compatible swapchain / framebuffer format available: " + formats);
+            }
+
+            // Make swapchain
+            XrViewConfigurationView viewConfig = views.get(0);
+            XrSwapchainCreateInfo swapchainCreateInfo = XrSwapchainCreateInfo.calloc(stack);
+            swapchainCreateInfo.type(XR10.XR_TYPE_SWAPCHAIN_CREATE_INFO);
+            swapchainCreateInfo.next(NULL);
+            swapchainCreateInfo.createFlags(0);
+            swapchainCreateInfo.usageFlags(XR10.XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT);
+            swapchainCreateInfo.format(chosenFormat);
+            swapchainCreateInfo.sampleCount(1);
+            swapchainCreateInfo.width(viewConfig.recommendedImageRectWidth());
+            swapchainCreateInfo.height(viewConfig.recommendedImageRectHeight());
+            swapchainCreateInfo.faceCount(1);
+            swapchainCreateInfo.arraySize(2);
+            swapchainCreateInfo.mipCount(1);
+
+            PointerBuffer handlePointer = stack.callocPointer(1);
+            error = XR10.xrCreateSwapchain(this.session, swapchainCreateInfo, handlePointer);
+            logError(error, "xrCreateSwapchain", "format: " + chosenFormat);
+            this.swapchain = new XrSwapchain(handlePointer.get(0), this.session);
+            this.width = swapchainCreateInfo.width();
+            this.height = swapchainCreateInfo.height();
         }
     }
 
@@ -1217,17 +1313,22 @@ public class MCOpenXR extends MCVR<XRInputAction> {
                                 VRSettings.LOGGER.warn("Input action '{}' not found", "/actions/" + set.getKey() + "/in/" + action.action());
                                 continue;
                             }
-                            long handle = this.mappedBindings.get(new ActionBind(inputAction.actionSet, source.path()));
-                            ActionType buttonType = ControllerMapping.getMapping(headsetPath).get(source.path());
 
+                            Long handle = this.mappedBindings.get(new ActionBind(inputAction.actionSet, source.path()));
+                            if (handle == null) {
+                                VRSettings.LOGGER.error("Cannot find button for path {}, are you sure this is the correct path?", source.path());
+                                continue;
+                            }
+
+                            ActionType buttonType = ControllerMapping.getMapping(headsetPath).get(source.path());
                             inputAction.addHandle(
                                 headsetPath,
                                 handle,
                                 source.path().contains("/left/") ? ControllerType.LEFT : ControllerType.RIGHT,
                                 buttonType
                             );
-                            inputAction.setType(action.type());
 
+                            inputAction.setType(action.type());
                             if (inputAction.getHandle(headsetPath).isEmpty() || handle == 0L) {
                                 VRSettings.LOGGER.error("Handle for '{}'/'{}' is null", "/actions/" + set.getKey() + "/in/" + action.action(), source.path());
                                 continue;
@@ -1238,8 +1339,6 @@ public class MCOpenXR extends MCVR<XRInputAction> {
                                 new XrAction(handle, new XrActionSet(this.actionSetHandles.get(inputAction.actionSet), this.instance)),
                                 getPath(source.path())
                             ));
-
-                            VRSettings.LOGGER.info("Mapped action '{}' to button '{}'", this.getInputActionByName("/actions/" + set.getKey() + "/in/" + action.action()).name, source.path());
                         }
                     }
 
