@@ -14,6 +14,7 @@ import org.lwjgl.system.Struct;
 import org.lwjgl.system.linux.X11;
 import org.lwjgl.system.windows.User32;
 import org.vivecraft.client_vr.settings.VRSettings;
+import org.vivecraft.util.VLoader;
 
 import java.util.Objects;
 
@@ -110,61 +111,59 @@ public interface DeviceCompat {
     class Mobile implements DeviceCompat {
         @Override
         public long getPlatformInfo(MemoryStack stack) {
-//            return XrInstanceCreateInfoAndroidKHR.calloc(stack).set(
-//                KHRAndroidCreateInstance.XR_TYPE_INSTANCE_CREATE_INFO_ANDROID_KHR,
-//                NULL,
-//                VLoader.getDalvikVM(),
-//                VLoader.getDalvikActivity()
-//            ).address();
-            return NULL;
+            return XrInstanceCreateInfoAndroidKHR.calloc(stack).set(
+                KHRAndroidCreateInstance.XR_TYPE_INSTANCE_CREATE_INFO_ANDROID_KHR,
+                NULL,
+                VLoader.getDalvikVM(),
+                VLoader.getDalvikActivity()
+            ).address();
         }
 
         @Override
         public void initOpenXRLoader(MemoryStack stack) {
-//            VRSettings.LOGGER.info("Platform: {}", System.getProperty("os.version"));
-//            VLoader.setupAndroid();
-//            XrLoaderInitInfoAndroidKHR initInfo = XrLoaderInitInfoAndroidKHR.calloc(stack).set(
-//                KHRLoaderInitAndroid.XR_TYPE_LOADER_INIT_INFO_ANDROID_KHR,
-//                NULL,
-//                VLoader.getDalvikVM(),
-//                VLoader.getDalvikActivity()
-//            );
-//
-//            KHRLoaderInit.xrInitializeLoaderKHR(XrLoaderInitInfoBaseHeaderKHR.create(initInfo.address()));
+            VRSettings.LOGGER.info("Platform: {}", System.getProperty("os.version"));
+            VLoader.setupAndroid();
+            // Ensure Android XR environment is ready
+            try {Thread.sleep(2500);} catch (InterruptedException ignored) {}
+            XrLoaderInitInfoAndroidKHR initInfo = XrLoaderInitInfoAndroidKHR.calloc(stack).set(
+                KHRLoaderInitAndroid.XR_TYPE_LOADER_INIT_INFO_ANDROID_KHR,
+                NULL,
+                VLoader.getDalvikVM(),
+                VLoader.getDalvikActivity()
+            );
+
+            KHRLoaderInit.xrInitializeLoaderKHR(XrLoaderInitInfoBaseHeaderKHR.create(initInfo.address()));
         }
 
         @Override
         public String getGraphicsExtension() {
-            //return KHROpenGLESEnable.XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME;
-            return null;
+            return KHROpenGLESEnable.XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME;
         }
 
         @Override
         public XrSwapchainImageOpenGLKHR.Buffer createImageBuffers(int imageCount, MemoryStack stack) {
-//            XrSwapchainImageOpenGLKHR.Buffer swapchainImageBuffer = XrSwapchainImageOpenGLKHR.calloc(imageCount, stack);
-//            for (XrSwapchainImageOpenGLKHR image : swapchainImageBuffer) {
-//                image.type(KHROpenGLESEnable.XR_TYPE_SWAPCHAIN_IMAGE_OPENGL_ES_KHR);
-//            }
-//
-//            return swapchainImageBuffer;
-            return null;
+            XrSwapchainImageOpenGLKHR.Buffer swapchainImageBuffer = XrSwapchainImageOpenGLKHR.calloc(imageCount, stack);
+            for (XrSwapchainImageOpenGLKHR image : swapchainImageBuffer) {
+                image.type(KHROpenGLESEnable.XR_TYPE_SWAPCHAIN_IMAGE_OPENGL_ES_KHR);
+            }
+
+            return swapchainImageBuffer;
         }
 
         @Override
         public Struct checkGraphics(MemoryStack stack, XrInstance instance, long systemID) {
-//            XrGraphicsRequirementsOpenGLESKHR graphicsRequirements = XrGraphicsRequirementsOpenGLESKHR.calloc(stack).type(KHROpenGLESEnable.XR_TYPE_GRAPHICS_REQUIREMENTS_OPENGL_ES_KHR);
-//            KHROpenGLESEnable.xrGetOpenGLESGraphicsRequirementsKHR(instance, systemID, graphicsRequirements);
-//            XrGraphicsBindingOpenGLESAndroidKHR graphicsBinding = XrGraphicsBindingOpenGLESAndroidKHR.calloc(stack);
-//            graphicsBinding.set(
-//                KHROpenGLESEnable.XR_TYPE_GRAPHICS_BINDING_OPENGL_ES_ANDROID_KHR,
-//                NULL,
-//                VLoader.getEGLDisplay(),
-//                VLoader.getEGLConfig(),
-//                VLoader.getEGLContext()
-//            );
-//
-//            return graphicsBinding;
-            return null;
+            XrGraphicsRequirementsOpenGLESKHR graphicsRequirements = XrGraphicsRequirementsOpenGLESKHR.calloc(stack).type(KHROpenGLESEnable.XR_TYPE_GRAPHICS_REQUIREMENTS_OPENGL_ES_KHR);
+            KHROpenGLESEnable.xrGetOpenGLESGraphicsRequirementsKHR(instance, systemID, graphicsRequirements);
+            XrGraphicsBindingOpenGLESAndroidKHR graphicsBinding = XrGraphicsBindingOpenGLESAndroidKHR.calloc(stack);
+            graphicsBinding.set(
+                KHROpenGLESEnable.XR_TYPE_GRAPHICS_BINDING_OPENGL_ES_ANDROID_KHR,
+                NULL,
+                VLoader.getEGLDisplay(),
+                VLoader.getEGLConfig(),
+                VLoader.getEGLContext()
+            );
+
+            return graphicsBinding;
         }
     }
 }

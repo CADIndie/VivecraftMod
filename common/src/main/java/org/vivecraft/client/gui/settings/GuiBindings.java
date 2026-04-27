@@ -10,6 +10,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.vivecraft.client.gui.framework.screens.GuiGroupedListEditorScreen;
 import org.vivecraft.client_vr.provider.control.ActionSet;
+import org.vivecraft.client_vr.provider.control.ControllerPaths;
 import org.vivecraft.client_vr.provider.control.Source;
 import org.vivecraft.client_vr.provider.openxr.MCOpenXR;
 import org.vivecraft.client_vr.provider.control.BindingProfile;
@@ -49,7 +50,7 @@ public class GuiBindings extends GuiGroupedListEditorScreen<Source> {
                     "Custom Profile",
                     "New custom profile",
                     "Custom",
-                    null,
+                    new ControllerPaths("", MCOpenXR.get().getCurrentInteractionProfile()),
                     bindings
                 );
 

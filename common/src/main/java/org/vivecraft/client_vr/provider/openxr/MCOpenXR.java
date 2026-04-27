@@ -141,6 +141,7 @@ public class MCOpenXR extends MCVR<XRInputAction> {
         } else {
             var action = this.getInputAction(keyMapping);
             for (ControllerType controllerType : ControllerType.values()) {
+                if (action.activeAction == 0) continue;
                 var handedaction = action.getHandle(this.activeController[controllerType.ordinal()])
                     .get(action.activeAction);
                 if (handedaction.hand() != controllerType) {
