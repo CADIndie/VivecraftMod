@@ -1,6 +1,8 @@
 package org.vivecraft.client_vr;
 
 import com.mojang.blaze3d.opengl.GlDevice;
+import com.mojang.blaze3d.opengl.GlStateManager;
+import com.mojang.blaze3d.opengl.GlTexture;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.GpuTexture;
@@ -15,6 +17,7 @@ import org.vivecraft.client.extensions.RenderTargetExtension;
 import org.vivecraft.client_vr.render.helpers.opengl.OpenGLHelper;
 
 import javax.annotation.Nullable;
+import java.util.function.Supplier;
 
 /**
  * extension of a regular RenderTarget that sets Vivecraft features on creation
@@ -24,7 +27,7 @@ public class VRTextureTarget extends RenderTarget {
     @Nullable
     private final Vector4fc clearColor;
 
-    private VRTextureTarget(
+    public VRTextureTarget(
         String name, int width, int height, boolean useDepth, int texId, boolean mipmaps, boolean useStencil,
         @Nullable Vector4fc clearColor)
     {

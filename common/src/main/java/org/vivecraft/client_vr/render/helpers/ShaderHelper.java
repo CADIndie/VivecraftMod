@@ -280,8 +280,8 @@ public class ShaderHelper {
             for (int x = 0; x < 4; x++) {
                 for (int y = 0; y < 2; y++) {
                     RenderTarget target = switch (RenderPass.values()[x + 4 * y]) {
-                        case LEFT -> DATA_HOLDER.vrRenderer.framebufferEye0;
-                        case RIGHT -> DATA_HOLDER.vrRenderer.framebufferEye1;
+                        case LEFT -> DATA_HOLDER.vrRenderer.getLeftEyeTarget();
+                        case RIGHT -> DATA_HOLDER.vrRenderer.getRightEyeTarget();
                         case CENTER -> DATA_HOLDER.vrRenderer.framebufferUndistorted;
                         case THIRD -> DATA_HOLDER.vrRenderer.framebufferMR;
                         case GUI -> GuiHandler.GUI_FRAMEBUFFER;
@@ -291,8 +291,8 @@ public class ShaderHelper {
                         default -> null;
                     };
                     if (target != null) {
-                        ShaderHelper.blitToScreen(target, screenWidth * x, screenWidth,
-                            screenHeight, screenHeight * y, 0.0F, 0.0F, false, false);
+/*                        ShaderHelper.blitToScreen(target, screenWidth * x, screenWidth,
+                            screenHeight, screenHeight * y, 0.0F, 0.0F, false, false);*/
                     }
                 }
             }
@@ -315,15 +315,15 @@ public class ShaderHelper {
             ))
         {
             // show both eyes side by side
-            RenderTarget leftEye = DATA_HOLDER.vrSettings.dualMirrorSwap ? DATA_HOLDER.vrRenderer.framebufferEye1 :
+            RenderTarget leftEye = DATA_HOLDER.vrSettings.dualMirrorSwap ? DATA_HOLDER.vrRenderer.getRightEyeTarget() :
                 DATA_HOLDER.vrRenderer.getLeftEyeTarget();
-            RenderTarget rightEye = DATA_HOLDER.vrSettings.dualMirrorSwap ? DATA_HOLDER.vrRenderer.framebufferEye0 :
+            RenderTarget rightEye = DATA_HOLDER.vrSettings.dualMirrorSwap ? DATA_HOLDER.vrRenderer.getLeftEyeTarget() :
                 DATA_HOLDER.vrRenderer.getRightEyeTarget();
 
             int screenWidth = MC.mainRenderTarget.width / 2;
             int screenHeight = MC.mainRenderTarget.height;
 
-            if (leftEye != null) {
+/*            if (leftEye != null) {
                 ShaderHelper.blitToScreen(leftEye, 0, screenWidth, screenHeight, 0, 0.0F, 0.0F,
                     DATA_HOLDER.vrSettings.dualMirrorCrop, false);
             }
@@ -332,7 +332,7 @@ public class ShaderHelper {
                 ShaderHelper.blitToScreen(rightEye, screenWidth, screenWidth, screenHeight, 0, 0.0F, 0.0F,
                     DATA_HOLDER.vrSettings.dualMirrorCrop,
                     false);
-            }
+            }*/
         } else {
             // general single buffer case
             float xCrop = 0.0F;
@@ -370,8 +370,8 @@ public class ShaderHelper {
             // source = DataHolder.getInstance().vrRenderer.telescopeFramebufferR;
             //
             if (source != null) {
-                ShaderHelper.blitFramebufferCrop(source, 0, 0, MC.mainRenderTarget.width, MC.mainRenderTarget.height,
-                    xCrop, yCrop, keepAspect);
+/*                ShaderHelper.blitFramebufferCrop(source, 0, 0, MC.mainRenderTarget.width, MC.mainRenderTarget.height,
+                    xCrop, yCrop, keepAspect);*/
             }
             if (source != GuiHandler.GUI_FRAMEBUFFER) {
                 blitGui();
@@ -396,8 +396,8 @@ public class ShaderHelper {
                     source = DATA_HOLDER.vrRenderer.getRightEyeTarget();
                 }
             }
-            blitFramebuffer(source, MC.mainRenderTarget.width / 2, 0,
-                MC.mainRenderTarget.width, MC.mainRenderTarget.height / 2);
+/*            blitFramebuffer(source, MC.mainRenderTarget.width / 2, 0,
+                MC.mainRenderTarget.width, MC.mainRenderTarget.height / 2);*/
         }
 
         Vector3f camPlayer = DATA_HOLDER.vrPlayer.vrdata_room_pre.getHeadPivotF()
@@ -437,6 +437,8 @@ public class ShaderHelper {
             guiMask
         );
 
+        GpuTextureView black = RenderHelper.getGpuTexture(RenderHelper.BLACK_TEXTURE);
+
         renderFullscreenQuad(() -> "Vive mixed reality", VRShaders.MIXED_REALITY_PIPELINE, renderPass -> {
             // set uniforms
             renderPass.setUniform(MixedRealityUBO.UBO_NAME, VRShaders.MIXED_REALITY_UBO.getBuffer());
@@ -461,15 +463,15 @@ public class ShaderHelper {
                     source = DATA_HOLDER.vrRenderer.framebufferUndistorted;
                 } else {
                     if (DATA_HOLDER.vrSettings.displayMirrorLeftEye) {
-                        source = DATA_HOLDER.vrRenderer.framebufferEye0;
+                        source = DATA_HOLDER.vrRenderer.getLeftEyeTarget();
                     } else {
-                        source = DATA_HOLDER.vrRenderer.framebufferEye1;
+                        source = DATA_HOLDER.vrRenderer.getRightEyeTarget();
                     }
                 }
-                renderPass.bindTexture(VRShaders.MIXED_REALITY_FIRST_COLOR_SAMPLER, source.getColorTextureView(),
+                renderPass.bindTexture(VRShaders.MIXED_REALITY_GUI_COLOR_SAMPLER, source.getColorTextureView(),
                     RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR));
             } else {
-                renderPass.bindTexture(VRShaders.MIXED_REALITY_FIRST_COLOR_SAMPLER, black,
+                renderPass.bindTexture(VRShaders.MIXED_REALITY_GUI_COLOR_SAMPLER, black,
                     RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR));
             }
         }, null);

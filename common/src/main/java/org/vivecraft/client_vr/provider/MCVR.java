@@ -1197,7 +1197,8 @@ public abstract class MCVR<T extends InputAction> {
         this.getInputAction(MOD.keyVRInteract).setEnabled(false);
         this.getInputAction(MOD.keyClimbeyGrab).setPriority(10);
         this.getInputAction(MOD.keyClimbeyGrab).setEnabled(false);
-        this.getInputAction(MOD.keyClimbeyJump).setPriority(20).setEnabled(false);
+        this.getInputAction(MOD.keyClimbeyJump).setPriority(20);
+        this.getInputAction(MOD.keyClimbeyJump).setEnabled(false);
         this.getInputAction(GuiHandler.KEY_KEYBOARD_CLICK).setPriority(50);
         this.getInputAction(GuiHandler.KEY_KEYBOARD_SHIFT).setPriority(50);
     }

@@ -2,11 +2,12 @@ package org.vivecraft.client_vr.provider.openxr;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import net.minecraft.util.Tuple;
+import net.minecraft.util.profiling.Profiler;
 import org.joml.Matrix4f;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.openxr.*;
 import org.lwjgl.system.MemoryStack;
-import org.vivecraft.client_vr.VRLayeredRenderTarget;
+import org.vivecraft.client_vr.VRTextureTarget;
 import org.vivecraft.client_vr.provider.VRRenderer;
 import org.vivecraft.client_vr.render.RenderConfigException;
 import org.vivecraft.client_vr.render.helpers.RenderHelper;
@@ -16,9 +17,9 @@ import java.nio.IntBuffer;
 
 public class OpenXRStereoRenderer extends VRRenderer {
     private final MCOpenXR openxr;
-    private int swapIndex;
-    private VRLayeredRenderTarget[] leftFramebuffers;
-    private VRLayeredRenderTarget[] rightFramebuffers;
+    private final int[] swapIndex = new int[] {0, 0}; // Needs to be initialized otherwise stuff splodes
+    private VRTextureTarget[] leftFramebuffers;
+    private VRTextureTarget[] rightFramebuffers;
     private boolean render;
     private XrCompositionLayerProjectionView.Buffer projectionLayerViews;
     private boolean recalculateProjectionMatrix = true;
@@ -32,33 +33,39 @@ public class OpenXRStereoRenderer extends VRRenderer {
     @Override
     public void createRenderTexture(int width, int height) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
+            for(int i = 0; i < 2; i++) {
+                // Get amount of views in the swapchain
+                IntBuffer intBuffer = stack.ints(0); //Set value to 0
+                int error = XR10.xrEnumerateSwapchainImages(this.openxr.swapchain[i], intBuffer, null);
+                this.openxr.logError(error, "xrEnumerateSwapchainImages", "get count");
 
-            // Get amount of views in the swapchain
-            IntBuffer intBuffer = stack.ints(0); //Set value to 0
-            int error = XR10.xrEnumerateSwapchainImages(this.openxr.swapchain, intBuffer, null);
-            this.openxr.logError(error, "xrEnumerateSwapchainImages", "get count");
+                // Now we know the amount, create the image buffer
+                int imageCount = intBuffer.get(0);
+                XrSwapchainImageOpenGLKHR.Buffer swapchainImageBuffer = this.openxr.device.createImageBuffers(imageCount,
+                    stack);
 
-            // Now we know the amount, create the image buffer
-            int imageCount = intBuffer.get(0);
-            XrSwapchainImageOpenGLKHR.Buffer swapchainImageBuffer = this.openxr.device.createImageBuffers(imageCount,
-                stack);
+                error = XR10.xrEnumerateSwapchainImages(this.openxr.swapchain[i], intBuffer,
+                    XrSwapchainImageBaseHeader.create(swapchainImageBuffer.address(), swapchainImageBuffer.capacity()));
+                this.openxr.logError(error, "xrEnumerateSwapchainImages", "get images");
 
-            error = XR10.xrEnumerateSwapchainImages(this.openxr.swapchain, intBuffer,
-                XrSwapchainImageBaseHeader.create(swapchainImageBuffer.address(), swapchainImageBuffer.capacity()));
-            this.openxr.logError(error, "xrEnumerateSwapchainImages", "get images");
+                if(i == 0) {
+                    this.leftFramebuffers = new VRTextureTarget[imageCount];
+                } else {
+                    this.rightFramebuffers = new VRTextureTarget[imageCount];
+                }
 
-            this.leftFramebuffers = new VRLayeredRenderTarget[imageCount];
-            this.rightFramebuffers = new VRLayeredRenderTarget[imageCount];
-
-            for (int i = 0; i < imageCount; i++) {
-                XrSwapchainImageOpenGLKHR openxrImage = swapchainImageBuffer.get(i);
-                this.leftFramebuffers[i] = new VRLayeredRenderTarget("L Eye " + i, width, height, openxrImage.image(),
-                    0);
-                String leftError = RenderHelper.checkGLError("Left Eye " + i + " framebuffer setup");
-                this.rightFramebuffers[i] = new VRLayeredRenderTarget("R Eye " + i, width, height, openxrImage.image(),
-                    1);
-                String rightError = RenderHelper.checkGLError("Right Eye " + i + " framebuffer setup");
-
+                String leftError = "";
+                String rightError = "";
+                for (int i1 = 0; i1 < imageCount; i1++) {
+                    XrSwapchainImageOpenGLKHR openxrImage = swapchainImageBuffer.get(i1);
+                    if(i == 0) {
+                        this.leftFramebuffers[i1] = new VRTextureTarget("L Eye " + i1, width, height, true, openxrImage.image(), true, false, null);
+                        leftError = RenderHelper.checkGLError("Left Eye " + i1 + " framebuffer setup");
+                    } else {
+                        this.rightFramebuffers[i1] = new VRTextureTarget("R Eye " + i1, width, height, true, openxrImage.image(), true, false, null);
+                        rightError = RenderHelper.checkGLError("Right Eye " + i1 + " framebuffer setup");
+                    }
+                }
                 if (this.lastError.isEmpty()) {
                     this.lastError = !leftError.isEmpty() ? leftError : rightError;
                 }
@@ -74,34 +81,32 @@ public class OpenXRStereoRenderer extends VRRenderer {
 
         this.projectionLayerViews = XrCompositionLayerProjectionView.calloc(2);
         try (MemoryStack stack = MemoryStack.stackPush()) {
+            for(int i = 0; i < 2; i++) {
+                IntBuffer intBuf2 = stack.callocInt(1);
 
-            IntBuffer intBuf2 = stack.callocInt(1);
+                int error = XR10.xrAcquireSwapchainImage(
+                    this.openxr.swapchain[i],
+                    XrSwapchainImageAcquireInfo.calloc(stack).type(XR10.XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO),
+                    intBuf2);
+                this.openxr.logError(error, "xrAcquireSwapchainImage", "");
 
-            int error = XR10.xrAcquireSwapchainImage(
-                this.openxr.swapchain,
-                XrSwapchainImageAcquireInfo.calloc(stack).type(XR10.XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO),
-                intBuf2);
-            this.openxr.logError(error, "xrAcquireSwapchainImage", "");
+                error = XR10.xrWaitSwapchainImage(this.openxr.swapchain[i],
+                    XrSwapchainImageWaitInfo.calloc(stack)
+                        .type(XR10.XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO)
+                        .timeout(XR10.XR_INFINITE_DURATION));
+                this.openxr.logError(error, "xrWaitSwapchainImage", "");
 
-            error = XR10.xrWaitSwapchainImage(this.openxr.swapchain,
-                XrSwapchainImageWaitInfo.calloc(stack)
-                    .type(XR10.XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO)
-                    .timeout(XR10.XR_INFINITE_DURATION));
-            this.openxr.logError(error, "xrWaitSwapchainImage", "");
+                this.swapIndex[i] = intBuf2.get(0);
 
-            this.swapIndex = intBuf2.get(0);
-
-            // Render view to the appropriate part of the swapchain image.
-            for (int viewIndex = 0; viewIndex < 2; viewIndex++) {
-                XrSwapchainSubImage subImage = this.projectionLayerViews.get(viewIndex)
+                // Render view to the appropriate part of the swapchain image.
+                XrSwapchainSubImage subImage = this.projectionLayerViews.get(i)
                     .type(XR10.XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW)
-                    .pose(this.openxr.viewBuffer.get(viewIndex).pose())
-                    .fov(this.openxr.viewBuffer.get(viewIndex).fov())
+                    .pose(this.openxr.viewBuffer.get(i).pose())
+                    .fov(this.openxr.viewBuffer.get(i).fov())
                     .subImage();
-                subImage.swapchain(this.openxr.swapchain);
+                subImage.swapchain(this.openxr.swapchain[i]);
                 subImage.imageRect().offset().set(0, 0);
                 subImage.imageRect().extent().set(this.openxr.width, this.openxr.height);
-                subImage.imageArrayIndex(viewIndex);
             }
             this.recalculateProjectionMatrix = true;
         }
@@ -133,12 +138,13 @@ public class OpenXRStereoRenderer extends VRRenderer {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             PointerBuffer layers = stack.callocPointer(1);
             int error;
-
-            error = XR10.xrReleaseSwapchainImage(
-                this.openxr.swapchain,
-                XrSwapchainImageReleaseInfo.calloc(stack)
-                    .type(XR10.XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO));
-            this.openxr.logError(error, "xrReleaseSwapchainImage", "");
+            for(int i = 0; i < 2; i++) {
+                error = XR10.xrReleaseSwapchainImage(
+                    this.openxr.swapchain[i],
+                    XrSwapchainImageReleaseInfo.calloc(stack)
+                        .type(XR10.XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO));
+                this.openxr.logError(error, "xrReleaseSwapchainImage", "");
+            }
 
             XrCompositionLayerProjection compositionLayerProjection = XrCompositionLayerProjection.calloc(stack)
                 .type(XR10.XR_TYPE_COMPOSITION_LAYER_PROJECTION)
@@ -169,12 +175,12 @@ public class OpenXRStereoRenderer extends VRRenderer {
 
     @Override
     public RenderTarget getLeftEyeTarget() {
-        return this.leftFramebuffers[this.swapIndex];
+        return this.leftFramebuffers[this.swapIndex[0]];
     }
 
     @Override
     public RenderTarget getRightEyeTarget() {
-        return this.rightFramebuffers[this.swapIndex];
+        return this.rightFramebuffers[this.swapIndex[1]];
     }
 
     @Override
@@ -192,14 +198,20 @@ public class OpenXRStereoRenderer extends VRRenderer {
         super.destroy();
 
         if (this.leftFramebuffers != null) {
-            for (VRLayeredRenderTarget leftFramebuffer : this.leftFramebuffers) {
+            for (VRTextureTarget leftFramebuffer : this.leftFramebuffers) {
+                if(leftFramebuffer == null) {
+                    continue;
+                }
                 leftFramebuffer.destroyBuffers();
             }
             this.leftFramebuffers = null;
         }
 
         if (this.rightFramebuffers != null) {
-            for (VRLayeredRenderTarget rightFramebuffer : this.rightFramebuffers) {
+            for (VRTextureTarget rightFramebuffer : this.rightFramebuffers) {
+                if(rightFramebuffer == null) {
+                    continue;
+                }
                 rightFramebuffer.destroyBuffers();
             }
             this.rightFramebuffers = null;

@@ -32,8 +32,6 @@ public class VRLayeredRenderTarget extends RenderTarget {
                     GpuTexture.USAGE_RENDER_ATTACHMENT, this.label + " / Color", TextureFormat.RGBA8, width, height, 1,
                 1, texId, layer);
             this.colorTextureView = glDevice.createTextureView(this.colorTexture);
-            this.colorTexture.setAddressMode(AddressMode.CLAMP_TO_EDGE);
-            this.setFilterMode(FilterMode.NEAREST);
         } else {
             throw new IllegalStateException("Only Opengl is currently supported by Vivecraft");
         }
