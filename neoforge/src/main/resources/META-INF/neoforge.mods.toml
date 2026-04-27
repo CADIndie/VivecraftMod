@@ -23,14 +23,14 @@ updateJSONURL = "https://raw.githubusercontent.com/Vivecraft/VivecraftMod/forge-
 [[dependencies.vivecraft]]
 modId = "neoforge"
 type = "required"
-versionRange = "[21.10.24-beta,)"
+versionRange = "[21.11.0-beta,)"
 ordering = "NONE"
 side = "BOTH"
 
 [[dependencies.vivecraft]]
 modId = "minecraft"
 type = "required"
-versionRange = "[1.21.10]"
+versionRange = "[1.21.11]"
 ordering = "NONE"
 side = "BOTH"
 
@@ -52,7 +52,11 @@ config = "vivecraft.cataclysm.mixins.json"
 [[mixins]]
 config = "vivecraft.dynamicfps.mixins.json"
 [[mixins]]
+config = "vivecraft.elementa.mixins.json"
+[[mixins]]
 config = "vivecraft.emf.mixins.json"
+[[mixins]]
+config = "vivecraft.epicfight.mixins.json"
 [[mixins]]
 config = "vivecraft.iris.mixins.json"
 [[mixins]]
@@ -68,4 +72,8 @@ config = "vivecraft.sereneseasons.mixins.json"
 [[mixins]]
 config = "vivecraft.sodium.mixins.json"
 [[mixins]]
+config = "vivecraft.voxy.mixins.json"
+[[mixins]]
 config = "vivecraft.xaerosmimimap.mixins.json"
+[[mixins]]
+config = "vivecraft.xaerosworldmap.mixins.json"

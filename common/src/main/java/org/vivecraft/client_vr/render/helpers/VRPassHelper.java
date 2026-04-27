@@ -11,11 +11,13 @@ import org.vivecraft.client_vr.ClientDataHolderVR;
 import org.vivecraft.client_vr.gameplay.screenhandlers.KeyboardHandler;
 import org.vivecraft.client_vr.gameplay.screenhandlers.RadialHandler;
 import org.vivecraft.client_vr.render.RenderConfigException;
+import org.vivecraft.client_vr.render.VRShaders;
 import org.vivecraft.client_vr.render.helpers.opengl.OpenGLHelper;
 import org.vivecraft.client_vr.settings.VRSettings;
 import org.vivecraft.client_xr.render_pass.RenderPassManager;
 import org.vivecraft.client_xr.render_pass.WorldRenderPass;
 import org.vivecraft.mod_compat_vr.optifine.OptifineHelper;
+import org.vivecraft.mod_compat_vr.shaders.ShadersHelper;
 
 import java.util.List;
 
@@ -46,6 +48,12 @@ public class VRPassHelper {
 
         RenderHelper.checkGLError("post game render " + eye);
 
+        if (ShadersHelper.isShaderActive()) {
+            // some shaders don't write an alpha value to the final image
+            ShaderHelper.renderFullscreenQuad(() -> "alpha clear", VRShaders.SOLID_ALPHA_PIPELINE, pass -> {},
+                MC.getMainRenderTarget().getColorTextureView());
+        }
+
         if (DATA_HOLDER.currentPass == RenderPass.LEFT || DATA_HOLDER.currentPass == RenderPass.RIGHT) {
             // copies the rendered scene to eye tex with fsaa and other postprocessing effects.
             Profiler.get().push("postProcessEye");
@@ -72,11 +80,8 @@ public class VRPassHelper {
 
         if (DATA_HOLDER.currentPass == RenderPass.CAMERA) {
             Profiler.get().push("cameraCopy");
-            // set alpha, because the blit does not copy it anymore
-            RenderSystem.getDevice().createCommandEncoder().clearColorTexture(
-                DATA_HOLDER.vrRenderer.cameraFramebuffer.getColorTexture(), 0xFF000000);
-            DATA_HOLDER.vrRenderer.cameraRenderFramebuffer.blitAndBlendToTexture(
-                DATA_HOLDER.vrRenderer.cameraFramebuffer.getColorTextureView());
+            ShaderHelper.blit(DATA_HOLDER.vrRenderer.cameraRenderFramebuffer, DATA_HOLDER.vrRenderer.cameraFramebuffer,
+                false);
             Profiler.get().pop();
         }
 

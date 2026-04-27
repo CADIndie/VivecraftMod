@@ -3,12 +3,13 @@ package org.vivecraft.client_vr.render;
 import net.minecraft.client.Camera;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.material.FogType;
 import org.vivecraft.api.client.data.RenderPass;
 import org.vivecraft.client_vr.ClientDataHolderVR;
 import org.vivecraft.client_vr.VRData;
 import org.vivecraft.client_xr.render_pass.RenderPassType;
+import org.vivecraft.mod_compat_vr.shaders.ShadersHelper;
 
 /**
  * an extension of the Camera, to correctly set up the camera position for the current pass
@@ -25,7 +26,7 @@ public class XRCamera extends Camera {
      */
     @Override
     public void setup(
-        BlockGetter level, Entity entity, boolean detached, boolean thirdPersonReverse, float partialTick)
+        Level level, Entity entity, boolean detached, boolean thirdPersonReverse, float partialTick)
     {
         if (RenderPassType.isVanilla()) {
             super.setup(level, entity, detached, thirdPersonReverse, partialTick);
@@ -42,6 +43,10 @@ public class XRCamera extends Camera {
         // we cannot set the rotation to the full matrix, because particles would rotate with the head
         // instead of being world up oriented
         this.setRotation(eye.getYaw(), -eye.getPitch());
+
+        if (ClientDataHolderVR.getInstance().isFirstPass || ShadersHelper.isSlowMode()) {
+            ShadersHelper.SHADOW_CAMERA_POSITION = this.position();
+        }
     }
 
     /**
@@ -49,9 +54,11 @@ public class XRCamera extends Camera {
      */
     @Override
     public void tick() {
-        if (RenderPassType.isVanilla()) {
-            super.tick();
+        if (!RenderPassType.isVanilla()) {
+            this.setPosition(
+                ClientDataHolderVR.getInstance().vrPlayer.getVRDataWorld().getEye(RenderPass.CENTER).getPosition());
         }
+        super.tick();
     }
 
     /**
@@ -67,7 +74,7 @@ public class XRCamera extends Camera {
         boolean renderSelf = RenderPass.renderPlayer(ClientDataHolderVR.getInstance().currentPass);
         // don't render the player in first person when sleeping
         renderSelf &= !(RenderPass.isFirstPerson(ClientDataHolderVR.getInstance().currentPass) &&
-            getEntity() instanceof LivingEntity && ((LivingEntity) getEntity()).isSleeping()
+            this.entity() instanceof LivingEntity && ((LivingEntity) this.entity()).isSleeping()
         );
         return renderSelf;
     }

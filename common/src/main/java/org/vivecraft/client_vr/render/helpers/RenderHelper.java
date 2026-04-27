@@ -12,15 +12,16 @@ import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.renderer.LightTexture;
-import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.core.Vec3i;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.phys.Vec3;
+import org.apache.commons.lang3.tuple.Pair;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
@@ -38,18 +39,20 @@ import org.vivecraft.client_vr.settings.VRSettings;
 import org.vivecraft.common.utils.MathUtils;
 import org.vivecraft.mod_compat_vr.shaders.ShadersHelper;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class RenderHelper {
 
     private static final ClientDataHolderVR DATA_HOLDER = ClientDataHolderVR.getInstance();
     private static final Minecraft MC = Minecraft.getInstance();
 
-    public static final ResourceLocation WHITE_TEXTURE = ResourceLocation.parse("vivecraft:textures/white.png");
-    public static final ResourceLocation BLACK_TEXTURE = ResourceLocation.parse("vivecraft:textures/black.png");
+    public static final Identifier WHITE_TEXTURE = Identifier.parse("vivecraft:textures/white.png");
+    public static final Identifier BLACK_TEXTURE = Identifier.parse("vivecraft:textures/black.png");
 
-    public static GpuTextureView getGpuTexture(ResourceLocation resourceLocation) {
-        return MC.getTextureManager().getTexture(resourceLocation).getTextureView();
+    public static GpuTextureView getGpuTexture(Identifier identifier) {
+        return MC.getTextureManager().getTexture(identifier).getTextureView();
     }
 
     /**
@@ -245,7 +248,7 @@ public class RenderHelper {
 
         // black background with border
         guiGraphics.fill(x, y, x + width, y + height, 0xFF000000);
-        guiGraphics.submitOutline(x, y, width, height, 0xFFFFFFFF);
+        guiGraphics.renderOutline(x, y, width, height, 0xFFFFFFFF);
 
         for (int line = 0; line < formattedChars.size(); line++) {
             guiGraphics.drawCenteredString(MC.font, formattedChars.get(line), guiGraphics.guiWidth() / 2,
@@ -522,6 +525,8 @@ public class RenderHelper {
             .setColor(color.getX(), color.getY(), color.getZ(), alpha);
     }
 
+    private static final Map<String, Pair<Integer, Integer>> GL_ERRORS = new HashMap<>();
+
     /**
      * checks if there were any opengl errors since this was last called
      *
@@ -530,7 +535,13 @@ public class RenderHelper {
      */
     public static String checkGLError(String errorSection) {
         int error = GlStateManager._getError();
-        if (error != 0) {
+        int count = 0;
+        Pair<Integer, Integer> oldError = GL_ERRORS.get(errorSection);
+        if (error != 0 && oldError != null && oldError.getLeft() == error) {
+            count = oldError.getRight() + 1;
+        }
+        GL_ERRORS.put(errorSection, Pair.of(error, count));
+        if (error != 0 && count < 5) {
             String errorString = switch (error) {
                 case GL11C.GL_INVALID_ENUM -> "invalid enum";
                 case GL11C.GL_INVALID_VALUE -> "invalid value";
@@ -545,8 +556,9 @@ public class RenderHelper {
             VRSettings.LOGGER.error("Vivecraft: @ {}", errorSection);
             VRSettings.LOGGER.error("Vivecraft: {}: {}", error, errorString);
             return errorString;
-        } else {
-            return "";
+        } else if (count == 5) {
+            VRSettings.LOGGER.error("Vivecraft: repeated gl errors for {}, not logging anymore", errorSection);
         }
+        return "";
     }
 }
