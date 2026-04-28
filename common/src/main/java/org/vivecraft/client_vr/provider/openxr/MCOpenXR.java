@@ -918,7 +918,7 @@ public class MCOpenXR extends MCVR<XRInputAction> {
                 };
             } else {
                 // Mobile runtimes tend to over-correct SRGB for some reason
-                desiredSwapchainFormats = new long[] {GL11.GL_RGBA8};
+                desiredSwapchainFormats = new long[] {GL31.GL_RGBA8};
             }
 
             // Choose format
@@ -945,6 +945,7 @@ public class MCOpenXR extends MCVR<XRInputAction> {
                 throw new RuntimeException("No compatible swapchain / framebuffer format available: " + formats);
             }
 
+            VRSettings.LOGGER.info("Selected {} as swapchain format", chosenFormat);
             this.swapchain = new XrSwapchain[2];
             // Make swapchain
             for(int i = 0; i < 2; i++) {

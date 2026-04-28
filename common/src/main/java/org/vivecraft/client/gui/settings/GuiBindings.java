@@ -102,8 +102,7 @@ public class GuiBindings extends GuiGroupedListEditorScreen<Source> {
             super.renderContent(guiGraphics, mouseX, mouseY, hovering, partialTick);
 
             int textY = this.getY() + this.getHeight() / 2 - Minecraft.getInstance().font.lineHeight / 2 + 2;
-            guiGraphics.drawString(Minecraft.getInstance().font, this.name, this.getContentX(), textY,
-                this.textColor());
+            guiGraphics.drawString(Minecraft.getInstance().font, this.name, this.getContentX(), textY, 0xFFFFFFFF);
             this.removeButton.active = this.isActive();
             this.editButton.active = this.isActive();
 

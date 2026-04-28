@@ -69,16 +69,15 @@
       "sources": [
         {
           "inputs": [
-            {"action": "vivecraft.key.ingameMenuButton", "type": "PRESS"},
-            {"action": "vivecraft.key.toggleKeyboard", "type": "LONG_PRESS"}
+            {"action": "vivecraft.key.ingameMenuButton", "type": "PRESS"}
           ],
-          "path": "/user/hand/left/input/y/click"
+          "path": "/user/hand/left/input/menu/click"
         },
         {
           "inputs": [
             {"action": "key.inventory", "type": "PRESS"}
           ],
-          "path": "/user/hand/left/input/x/click"
+          "path": "/user/hand/left/input/y/click"
         }
       ]
     },
@@ -143,7 +142,7 @@
           "inputs": [
             {"action": "vivecraft.key.teleport", "type": "PRESS"}
           ],
-          "path": "/user/hand/left/input/trigger/value"
+          "path": "/user/hand/left/input/x/click"
         },
         {
           "inputs": [
@@ -155,7 +154,7 @@
           "inputs": [
             {"action": "key.use", "type": "PRESS"}
           ],
-          "path": "/user/hand/right/input/a/click"
+          "path": "/user/hand/left/input/trigger/value"
         },
         {
           "inputs": [
@@ -167,7 +166,7 @@
           "inputs": [
             {"action": "key.jump", "type": "PRESS"}
           ],
-          "path": "/user/hand/left/input/thumbstick/click"
+          "path": "/user/hand/right/input/a/click"
         },
         {
           "inputs": [
@@ -185,7 +184,7 @@
           "inputs": [
             {"action": "vivecraft.key.teleportFallback", "type": "VEC1"}
           ],
-          "path": "/user/hand/left/input/trigger/value"
+          "path": "/user/hand/left/input/x/click"
         }
       ]
     },
