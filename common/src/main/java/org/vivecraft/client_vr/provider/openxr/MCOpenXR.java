@@ -10,6 +10,10 @@ import org.joml.Matrix4fc;
 import org.joml.Vector2f;
 import org.joml.Vector3f;
 import org.lwjgl.PointerBuffer;
+import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL21;
+import org.lwjgl.opengl.GL30;
+import org.lwjgl.opengl.GL31;
 import org.lwjgl.openxr.*;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
@@ -31,13 +35,14 @@ import org.vivecraft.common.utils.MathUtils;
 import oshi.util.tuples.Pair;
 
 import java.io.FileNotFoundException;
-import java.io.IOException;
 import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.nio.LongBuffer;
 import java.util.*;
+
+import static org.lwjgl.system.MemoryStack.stackCallocPointer;
 
 public class MCOpenXR extends MCVR<XRInputAction> {
 
@@ -993,86 +998,9 @@ public class MCOpenXR extends MCVR<XRInputAction> {
             error = XR10.xrEnumerateViewConfigurationViews(this.instance, this.systemID,
                 XR10.XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO, intBuf, this.viewConfigurationBuffer);
             logError(error, "xrEnumerateViewConfigurationViews", "get views");
-            int viewCountNumber = intBuf.get(0);
 
-            this.viewBuffer = new XrView.Buffer(
-                bufferHeap(viewCountNumber, XrView.SIZEOF, XR10.XR_TYPE_VIEW)
-            );
-            // Check swapchain formats
-            error = XR10.xrEnumerateSwapchainFormats(this.session, intBuf, null);
-            logError(error, "xrEnumerateSwapchainFormats", "get count");
-
-            // Get swapchain formats
-            LongBuffer swapchainFormats = stack.callocLong(intBuf.get(0));
-            error = XR10.xrEnumerateSwapchainFormats(this.session, intBuf, swapchainFormats);
-            logError(error, "xrEnumerateSwapchainFormats", "get formats");
-
-            long[] desiredSwapchainFormats;
-            if (this.device.getClass() == DeviceCompat.Desktop.class) {
-                desiredSwapchainFormats = new long[] {
-                    // SRGB formats
-                    GL21.GL_SRGB8_ALPHA8,
-                    GL21.GL_SRGB8,
-                    // others
-                    GL11.GL_RGB10_A2,
-                    GL30.GL_RGBA16F,
-                    GL30.GL_RGB16F,
-
-                    // The two below should only be used as a fallback, as they are linear color formats without enough bits for color
-                    // depth, thus leading to banding.
-                    GL11.GL_RGBA8,
-                    GL31.GL_RGBA8_SNORM
-                };
-            } else {
-                // Mobile runtimes tend to over-correct SRGB for some reason
-                desiredSwapchainFormats = new long[] {GL11.GL_RGBA8};
-            }
-
-            // Choose format
-            long chosenFormat = 0;
-            for (long glFormatIter : desiredSwapchainFormats) {
-                swapchainFormats.rewind();
-                while (swapchainFormats.hasRemaining()) {
-                    if (glFormatIter == swapchainFormats.get()) {
-                        chosenFormat = glFormatIter;
-                        break;
-                    }
-                }
-                if (chosenFormat != 0) {
-                    break;
-                }
-            }
-
-            if (chosenFormat == 0) {
-                var formats = new ArrayList<Long>();
-                swapchainFormats.rewind();
-                while (swapchainFormats.hasRemaining()) {
-                    formats.add(swapchainFormats.get());
-                }
-                throw new RuntimeException("No compatible swapchain / framebuffer format available: " + formats);
-            }
-
-            // Make swapchain
-            XrViewConfigurationView viewConfig = views.get(0);
-            XrSwapchainCreateInfo swapchainCreateInfo = XrSwapchainCreateInfo.calloc(stack);
-            swapchainCreateInfo.type(XR10.XR_TYPE_SWAPCHAIN_CREATE_INFO);
-            swapchainCreateInfo.next(NULL);
-            swapchainCreateInfo.createFlags(0);
-            swapchainCreateInfo.usageFlags(XR10.XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT);
-            swapchainCreateInfo.format(chosenFormat);
-            swapchainCreateInfo.sampleCount(1);
-            swapchainCreateInfo.width(viewConfig.recommendedImageRectWidth());
-            swapchainCreateInfo.height(viewConfig.recommendedImageRectHeight());
-            swapchainCreateInfo.faceCount(1);
-            swapchainCreateInfo.arraySize(2);
-            swapchainCreateInfo.mipCount(1);
-
-            PointerBuffer handlePointer = stack.callocPointer(1);
-            error = XR10.xrCreateSwapchain(this.session, swapchainCreateInfo, handlePointer);
-            logError(error, "xrCreateSwapchain", "format: " + chosenFormat);
-            this.swapchain = new XrSwapchain(handlePointer.get(0), this.session);
-            this.width = swapchainCreateInfo.width();
-            this.height = swapchainCreateInfo.height();
+            this.viewCount = intBuf.get(0);
+            this.viewBuffer = new XrView.Buffer(bufferHeap(this.viewCount, XrView.SIZEOF, XR10.XR_TYPE_VIEW));
         }
     }
 
@@ -1389,7 +1317,6 @@ public class MCOpenXR extends MCVR<XRInputAction> {
             XrActionSpaceCreateInfo actionSpace = XrActionSpaceCreateInfo.calloc(stack);
             actionSpace.type$Default();
             actionSpace.next(MemoryUtil.NULL);
-            PointerBuffer pp = stackCallocPointer(1);
 
             long[] allPoses = {this.grip[RIGHT_CONTROLLER], this.grip[LEFT_CONTROLLER], this.aim[RIGHT_CONTROLLER], this.aim[LEFT_CONTROLLER]};
             for (int i = 0; i < allPoses.length; i++) {
@@ -1398,7 +1325,7 @@ public class MCOpenXR extends MCVR<XRInputAction> {
                 actionSpace.subactionPath(getPath(hand));
                 actionSpace.poseInActionSpace(POSE_IDENTITY);
 
-                PointerBuffer pp = MemoryStack.stackCallocPointer(1);
+                PointerBuffer pp = stackCallocPointer(1);
                 error = XR10.xrCreateActionSpace(this.session, actionSpace, pp);
                 logError(error, "xrCreateActionSpace", allPoses[i] == this.grip[RIGHT_CONTROLLER] ? "grip: " + hand : "aim: " + hand);
                 this.gripSpace[RIGHT_CONTROLLER] = new XrSpace(pp.get(0), this.session);
@@ -1410,16 +1337,6 @@ public class MCOpenXR extends MCVR<XRInputAction> {
             }
         } catch (FileNotFoundException e) {
             throw new RuntimeException("Binding profile file not found: " + e.getMessage(), e);
-        }
-    }
-
-    public String getCurrentInteractionProfile() {
-        try (MemoryStack stack = MemoryStack.stackPush()) {
-            XrInteractionProfileState state = XrInteractionProfileState.calloc(stack);
-            state.type$Default();
-            int error = XR10.xrGetCurrentInteractionProfile(this.session, getPath("/user/hand/left"), state);
-            logError(error, "xrGetCurrentInteractionProfile", "left");
-            return getString(state.interactionProfile());
         }
     }
 
@@ -1477,7 +1394,7 @@ public class MCOpenXR extends MCVR<XRInputAction> {
             hands.countSubactionPaths(1);
             hands.subactionPaths(lb.rewind());
             hands.localizedActionName(MemoryUtil.memUTF8(s));
-            PointerBuffer buffer = MemoryStack.stackCallocPointer(1);
+            PointerBuffer buffer = stackCallocPointer(1);
 
             int error = XR10.xrCreateAction(actionSet, hands, buffer);
             logError(error, "xrCreateAction", "name:", name, "type:", type.name());

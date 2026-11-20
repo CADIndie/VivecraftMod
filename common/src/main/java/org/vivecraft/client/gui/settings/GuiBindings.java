@@ -2,7 +2,7 @@ package org.vivecraft.client.gui.settings;
 
 import com.google.common.collect.ImmutableList;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.narration.NarratableEntry;
@@ -96,23 +96,21 @@ public class GuiBindings extends GuiGroupedListEditorScreen<Source> {
         }
 
         @Override
-        public void renderContent(
-            GuiGraphics guiGraphics, int mouseX, int mouseY, boolean hovering, float partialTick)
+        public void extractContent(
+            GuiGraphicsExtractor graphics, int mouseX, int mouseY, boolean hovering, float partialTick)
         {
-            super.renderContent(guiGraphics, mouseX, mouseY, hovering, partialTick);
+            super.extractContent(graphics, mouseX, mouseY, hovering, partialTick);
 
             int textY = this.getY() + this.getHeight() / 2 - Minecraft.getInstance().font.lineHeight / 2 + 2;
-            guiGraphics.drawString(Minecraft.getInstance().font, this.name, this.getContentX(), textY,
-                this.textColor());
             this.removeButton.active = this.isActive();
             this.editButton.active = this.isActive();
 
             this.editButton.setX(this.getContentRight() - this.editButton.getWidth() - 20);
             this.editButton.setY(this.getY());
-            this.editButton.render(guiGraphics, mouseX, mouseY, partialTick);
+            this.editButton.extractRenderState(graphics, mouseX, mouseY, partialTick);
             this.removeButton.setX(this.getContentRight() - 20);
             this.removeButton.setY(this.getY());
-            this.removeButton.render(guiGraphics, mouseX, mouseY, partialTick);
+            this.removeButton.extractRenderState(graphics, mouseX, mouseY, partialTick);
         }
 
         @Override
