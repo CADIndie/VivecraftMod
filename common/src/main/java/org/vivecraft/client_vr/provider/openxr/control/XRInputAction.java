@@ -17,9 +17,12 @@ import java.util.Map;
 public class XRInputAction extends InputAction {
 
     private final Map<String, List<HandedAction>> handles = new HashMap<>();
+    private final List<ChordBinding> chords = new ArrayList<>();
+    private boolean chordState;
+    private boolean chordChanged;
     public int activeAction;
 
-    public record HandedAction(Long handle, ControllerType hand, ActionType action) {}
+    public record HandedAction(Long handle, ControllerType hand, ActionType action, String path, int dataIndex) {}
 
     public final List<DigitalData> digitalData = new ArrayList<>();
     public final List<AnalogData> analogData = new ArrayList<>();
@@ -39,17 +42,73 @@ public class XRInputAction extends InputAction {
         return handles.getOrDefault(controller, List.of());
     }
 
-    public void addHandle(String controller, Long handle, ControllerType hand, ActionType actionType) {
+    public void addHandle(String controller, Long handle, ControllerType hand, ActionType actionType, String path) {
         if (!handles.containsKey(controller)) {
             var list = new ArrayList<HandedAction>();
-            list.add(new HandedAction(handle, hand, actionType));
+            int dataIndex = this.digitalData.size();
+            list.add(new HandedAction(handle, hand, actionType, path, dataIndex));
             handles.put(controller, list);
+            this.analogData.add(new AnalogData());
+            this.digitalData.add(new DigitalData());
         } else {
-            handles.get(controller).add(new HandedAction(handle, hand, actionType));
+            boolean duplicate = handles.get(controller).stream()
+                .anyMatch(existing -> existing.handle().equals(handle) && existing.path().equals(path));
+            if (!duplicate) {
+                int dataIndex = this.digitalData.size();
+                handles.get(controller).add(new HandedAction(handle, hand, actionType, path, dataIndex));
+                this.analogData.add(new AnalogData());
+                this.digitalData.add(new DigitalData());
+            } else {
+                return;
+            }
         }
-        this.analogData.add(new AnalogData());
-        this.digitalData.add(new DigitalData());
     }
+
+    public void addChord(List<String> paths) {
+        if (!paths.isEmpty() && this.chords.stream()
+            .noneMatch(existing -> existing.paths().equals(paths))) {
+            this.chords.add(new ChordBinding(List.copyOf(paths)));
+        }
+    }
+
+    private void updateChordState() {
+        if (this.chords.isEmpty()) {
+            this.chordState = false;
+            this.chordChanged = false;
+            return;
+        }
+
+        boolean nextState = false;
+        for (ChordBinding chord : this.chords) {
+            boolean satisfied = true;
+            for (String path : chord.paths()) {
+                boolean found = false;
+                boolean on = false;
+                for (DigitalData data : this.digitalData) {
+                    if (path.equals(data.path)) {
+                        found = true;
+                        on = data.state && data.isActive;
+                        break;
+                    }
+                }
+                if (!found || !on) {
+                    satisfied = false;
+                    break;
+                }
+            }
+            if (satisfied) {
+                nextState = true;
+                break;
+            }
+        }
+
+        if (nextState != this.chordState) {
+            this.chordChanged = true;
+        }
+        this.chordState = nextState;
+    }
+
+    private record ChordBinding(List<String> paths) {}
 
     private List<DigitalData> digitalData() {
         return this.digitalData;
@@ -61,15 +120,46 @@ public class XRInputAction extends InputAction {
 
     @Nullable
     public HandedAction getActiveAction(String[] controllers) {
-        if (this.activeAction == 0) {
+        if (controllers == null || this.activeAction < 0) {
             return null;
         }
-        return this.handles.get(controllers[this.digitalData().get(this.activeAction).hand.ordinal()])
-            .get(this.activeAction);
+        if (this.activeAction < this.digitalData().size()) {
+            DigitalData activeData = this.digitalData().get(this.activeAction);
+            if (activeData.hand != null && activeData.isActive && (activeData.state || activeData.isChanged)) {
+                String controller = controllers[activeData.hand.ordinal()];
+                for (HandedAction handedAction : this.handles.getOrDefault(controller, List.of())) {
+                    if (handedAction.dataIndex() == this.activeAction) {
+                        return handedAction;
+                    }
+                }
+            }
+        }
+        for (int dataIndex = 0; dataIndex < this.digitalData().size(); dataIndex++) {
+            DigitalData data = this.digitalData().get(dataIndex);
+            if (data.hand == null || !data.isActive || (!data.state && !data.isChanged)) {
+                continue;
+            }
+            String controller = controllers[data.hand.ordinal()];
+            for (HandedAction handedAction : this.handles.getOrDefault(controller, List.of())) {
+                if (handedAction.dataIndex() == dataIndex) {
+                    this.activeAction = dataIndex;
+                    return handedAction;
+                }
+            }
+        }
+        return null;
     }
 
     @Override
     public boolean isActive() {
+        if (!this.chords.isEmpty()) {
+            this.updateChordState();
+            if (this.chordState) {
+                this.activeAction = 0;
+                return true;
+            }
+            return false;
+        }
         for (int i = 0; i < this.digitalData().size(); i++) {
             DigitalData data = this.digitalData().get(i);
             if (data.type == null) {
@@ -95,6 +185,10 @@ public class XRInputAction extends InputAction {
 
     @Override
     public boolean isButtonPressed() {
+        if (!this.chords.isEmpty()) {
+            this.updateChordState();
+            return this.chordState;
+        }
         for (int i = 0; i < this.digitalData().size(); i++) {
             DigitalData data = this.digitalData().get(i);
             if (data.type == null) {
@@ -136,6 +230,12 @@ public class XRInputAction extends InputAction {
 
     @Override
     public boolean isButtonChanged() {
+        if (!this.chords.isEmpty()) {
+            this.updateChordState();
+            boolean changed = this.chordChanged;
+            this.chordChanged = false;
+            return changed;
+        }
         for (int i = 0; i < this.digitalData().size(); i++) {
             if (this.digitalData().get(i).isChanged) {
                 this.activeAction = i;
@@ -227,6 +327,7 @@ public class XRInputAction extends InputAction {
 
     public static class DigitalData {
         public boolean state;
+        public String path;
         public boolean isChanged;
         public boolean isActive;
         public long lastChange;

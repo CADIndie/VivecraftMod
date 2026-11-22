@@ -531,7 +531,7 @@ public class SettingsList extends ContainerObjectSelectionList<SettingsList.Base
 
     public static abstract class BaseEntry extends Entry<BaseEntry> {
 
-        private final Component name;
+        public final Component name;
         private final Component inactiveName;
         private final Supplier<String> tooltip;
         private boolean active = true;

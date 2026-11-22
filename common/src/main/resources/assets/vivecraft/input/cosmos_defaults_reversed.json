@@ -8,10 +8,10 @@
       "chords": [
         {
           "inputs": [
-            {"action": "/user/hand/left/input/squeeze/click", "type": "PRESS"},
-            {"action": "/user/hand/right/input/squeeze/click", "type": "PRESS"}
+            ["/user/hand/left/input/squeeze/click", "click"],
+            ["/user/hand/right/input/squeeze/click", "click"]
           ],
-          "output": "vivecraft.key.climbeyjump"
+          "output": "/actions/contextual/in/vivecraft.key.climbeyjump"
         }
       ],
       "sources": [

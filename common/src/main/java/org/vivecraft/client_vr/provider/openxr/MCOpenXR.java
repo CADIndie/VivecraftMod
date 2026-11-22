@@ -162,13 +162,25 @@ public class MCOpenXR extends MCVR<XRInputAction> {
             return null;
         } else {
             var action = this.getInputAction(keyMapping);
+            if (action == null) {
+                return null;
+            }
+
+            var activeAction = action.getActiveAction(this.activeController);
+            if (activeAction != null) {
+                return activeAction.hand();
+            }
+
             for (ControllerType controllerType : ControllerType.values()) {
-                var handedaction = action.getHandle(this.activeController[controllerType.ordinal()])
-                    .get(action.activeAction);
-                if (handedaction.hand() != controllerType) {
-                    continue;
+                for (var handedAction : action.getHandle(this.activeController[controllerType.ordinal()])) {
+                    if (handedAction.dataIndex() >= 0 &&
+                        handedAction.dataIndex() < action.digitalData.size() &&
+                        action.digitalData.get(handedAction.dataIndex()).isActive &&
+                        action.digitalData.get(handedAction.dataIndex()).state)
+                    {
+                        return handedAction.hand();
+                    }
                 }
-                return handedaction.hand();
             }
             return null;
 //            long path = this.getInputAction(keyMapping).getLastOrigin();
@@ -394,6 +406,7 @@ public class MCOpenXR extends MCVR<XRInputAction> {
             info.type$Default();
             XRInputAction.HandedAction handedAction = action.getHandle(this.activeController[hand.ordinal()])
                 .get(index);
+            int dataIndex = handedAction.dataIndex();
             info.action(new XrAction(handedAction.handle(),
                 new XrActionSet(this.actionSetHandles.get(action.actionSet), this.instance)));
             info.subactionPath(
@@ -404,32 +417,33 @@ public class MCOpenXR extends MCVR<XRInputAction> {
 
             if (state.changedSinceLastSync()) {
                 if (state.currentState()) {
-                    action.digitalData.get(index).toggle = !action.digitalData.get(index).toggle;
-                    action.digitalData.get(index).doublePress =
-                        System.nanoTime() - action.digitalData.get(index).lastChange > 250_000_000L;
+                    action.digitalData.get(dataIndex).toggle = !action.digitalData.get(dataIndex).toggle;
+                    action.digitalData.get(dataIndex).doublePress =
+                        System.nanoTime() - action.digitalData.get(dataIndex).lastChange > 250_000_000L;
                 } else {
-                    action.digitalData.get(index).longPress =
-                        System.nanoTime() - action.digitalData.get(index).lastChange > 500_000_000L;
+                    action.digitalData.get(dataIndex).longPress =
+                        System.nanoTime() - action.digitalData.get(dataIndex).lastChange > 500_000_000L;
                 }
-                action.digitalData.get(index).lastChange = System.nanoTime();
+                action.digitalData.get(dataIndex).lastChange = System.nanoTime();
             } else if (state.currentState()) {
-                action.digitalData.get(index).hold =
-                    System.nanoTime() - action.digitalData.get(index).lastChange > 500_000_000L;
+                action.digitalData.get(dataIndex).hold =
+                    System.nanoTime() - action.digitalData.get(dataIndex).lastChange > 500_000_000L;
             }
 
-            action.digitalData.get(index).state = state.currentState();
-            action.digitalData.get(index).isActive = state.isActive();
-            action.digitalData.get(index).isChanged = state.changedSinceLastSync();
-            action.digitalData.get(index).activeOrigin = getOrigins(handedAction, action).getFirst();
-            action.digitalData.get(index).type = handedAction.action();
-            action.digitalData.get(index).hand = handedAction.hand();
+            action.digitalData.get(dataIndex).state = state.currentState();
+            action.digitalData.get(dataIndex).isActive = state.isActive();
+            action.digitalData.get(dataIndex).isChanged = state.changedSinceLastSync();
+            action.digitalData.get(dataIndex).activeOrigin = getOrigins(handedAction, action).getFirst();
+            action.digitalData.get(dataIndex).type = handedAction.action();
+            action.digitalData.get(dataIndex).hand = handedAction.hand();
+            action.digitalData.get(dataIndex).path = handedAction.path();
 
-            action.analogData.get(index).deltaX =
+            action.analogData.get(dataIndex).deltaX =
                 state.changedSinceLastSync() ? state.currentState() ? 1.0F : -1.0F : 0.0F;
-            action.analogData.get(index).x = state.currentState() ? 1.0f : 0.0f;
-            action.analogData.get(index).activeOrigin = getOrigins(handedAction, action).getFirst();
-            action.analogData.get(index).isActive = state.isActive();
-            action.analogData.get(index).isChanged = state.changedSinceLastSync();
+            action.analogData.get(dataIndex).x = state.currentState() ? 1.0f : 0.0f;
+            action.analogData.get(dataIndex).activeOrigin = getOrigins(handedAction, action).getFirst();
+            action.analogData.get(dataIndex).isActive = state.isActive();
+            action.analogData.get(dataIndex).isChanged = state.changedSinceLastSync();
         }
     }
 
@@ -439,6 +453,7 @@ public class MCOpenXR extends MCVR<XRInputAction> {
             info.type$Default();
             XRInputAction.HandedAction handedAction = action.getHandle(this.activeController[hand.ordinal()])
                 .get(index);
+            int dataIndex = handedAction.dataIndex();
             info.action(new XrAction(handedAction.handle(),
                 new XrActionSet(this.actionSetHandles.get(action.actionSet), this.instance)));
             info.subactionPath(
@@ -447,37 +462,38 @@ public class MCOpenXR extends MCVR<XRInputAction> {
             int error = XR10.xrGetActionStateFloat(this.session, info, state);
             logError(error, "xrGetActionStateFloat", action.name);
 
-            action.analogData.get(index).deltaX = state.currentState() - action.analogData.get(index).x;
-            action.analogData.get(index).x = state.currentState();
-            action.analogData.get(index).activeOrigin = getOrigins(action).getFirst();
-            action.analogData.get(index).isActive = state.isActive();
-            action.analogData.get(index).isChanged = state.changedSinceLastSync();
+            action.analogData.get(dataIndex).deltaX = state.currentState() - action.analogData.get(dataIndex).x;
+            action.analogData.get(dataIndex).x = state.currentState();
+            action.analogData.get(dataIndex).activeOrigin = getOrigins(handedAction, action).getFirst();
+            action.analogData.get(dataIndex).isActive = state.isActive();
+            action.analogData.get(dataIndex).isChanged = state.changedSinceLastSync();
 
             //Write digital data
             boolean on = Math.abs(state.currentState()) > 0.5F;
             boolean changed =
-                Math.abs(action.analogData.get(index).x - action.analogData.get(index).deltaX) > 0.5F != on;
+                Math.abs(action.analogData.get(dataIndex).x - action.analogData.get(dataIndex).deltaX) > 0.5F != on;
             if (changed) {
                 if (on) {
-                    action.digitalData.get(index).toggle = !action.digitalData.get(index).toggle;
-                    action.digitalData.get(index).doublePress =
-                        System.nanoTime() - action.digitalData.get(index).lastChange > 250_000_000L;
+                    action.digitalData.get(dataIndex).toggle = !action.digitalData.get(dataIndex).toggle;
+                    action.digitalData.get(dataIndex).doublePress =
+                        System.nanoTime() - action.digitalData.get(dataIndex).lastChange > 250_000_000L;
                 } else {
-                    action.digitalData.get(index).longPress =
-                        System.nanoTime() - action.digitalData.get(index).lastChange > 500_000_000L;
+                    action.digitalData.get(dataIndex).longPress =
+                        System.nanoTime() - action.digitalData.get(dataIndex).lastChange > 500_000_000L;
                 }
-                action.digitalData.get(index).lastChange = System.nanoTime();
+                action.digitalData.get(dataIndex).lastChange = System.nanoTime();
             } else if (on) {
-                action.digitalData.get(index).hold =
-                    System.nanoTime() - action.digitalData.get(index).lastChange > 500_000_000L;
+                action.digitalData.get(dataIndex).hold =
+                    System.nanoTime() - action.digitalData.get(dataIndex).lastChange > 500_000_000L;
             }
 
-            action.digitalData.get(index).state = on;
-            action.digitalData.get(index).isActive = state.isActive();
-            action.digitalData.get(index).isChanged = changed;
-            action.digitalData.get(index).activeOrigin = getOrigins(action).getFirst();
-            action.digitalData.get(index).type = handedAction.action();
-            action.digitalData.get(index).hand = handedAction.hand();
+            action.digitalData.get(dataIndex).state = on;
+            action.digitalData.get(dataIndex).isActive = state.isActive();
+            action.digitalData.get(dataIndex).isChanged = changed;
+            action.digitalData.get(dataIndex).activeOrigin = getOrigins(handedAction, action).getFirst();
+            action.digitalData.get(dataIndex).type = handedAction.action();
+            action.digitalData.get(dataIndex).hand = handedAction.hand();
+            action.digitalData.get(dataIndex).path = handedAction.path();
         }
     }
 
@@ -487,6 +503,7 @@ public class MCOpenXR extends MCVR<XRInputAction> {
             info.type$Default();
             XRInputAction.HandedAction handedAction = action.getHandle(this.activeController[hand.ordinal()])
                 .get(index);
+            int dataIndex = handedAction.dataIndex();
             info.action(new XrAction(handedAction.handle(),
                 new XrActionSet(this.actionSetHandles.get(action.actionSet), this.instance)));
             info.subactionPath(
@@ -495,41 +512,42 @@ public class MCOpenXR extends MCVR<XRInputAction> {
             int error = XR10.xrGetActionStateVector2f(this.session, info, state);
             logError(error, "xrGetActionStateVector2f", action.name);
 
-            action.analogData.get(index).deltaX = state.currentState().x() - action.analogData.get(index).x;
-            action.analogData.get(index).deltaY = state.currentState().y() - action.analogData.get(index).y;
-            action.analogData.get(index).x = state.currentState().x();
-            action.analogData.get(index).y = state.currentState().y();
-            action.analogData.get(index).activeOrigin = getOrigins(action).getFirst();
-            action.analogData.get(index).isActive = state.isActive();
-            action.analogData.get(index).isChanged = state.changedSinceLastSync();
+            action.analogData.get(dataIndex).deltaX = state.currentState().x() - action.analogData.get(dataIndex).x;
+            action.analogData.get(dataIndex).deltaY = state.currentState().y() - action.analogData.get(dataIndex).y;
+            action.analogData.get(dataIndex).x = state.currentState().x();
+            action.analogData.get(dataIndex).y = state.currentState().y();
+            action.analogData.get(dataIndex).activeOrigin = getOrigins(handedAction, action).getFirst();
+            action.analogData.get(dataIndex).isActive = state.isActive();
+            action.analogData.get(dataIndex).isChanged = state.changedSinceLastSync();
 
             //Write digital data
             boolean on = Math.abs(state.currentState().x()) > 0.5F || Math.abs(state.currentState().y()) > 0.5F;
-            boolean changed = Math.abs(action.analogData.get(index).x - action.analogData.get(index).deltaX) > 0.5F !=
-                Math.abs(action.analogData.get(index).x) > 0.5F ||
-                Math.abs(action.analogData.get(index).y - action.analogData.get(index).deltaY) > 0.5F !=
-                    Math.abs(action.analogData.get(index).y) > 0.5F;
+            boolean changed = Math.abs(action.analogData.get(dataIndex).x - action.analogData.get(dataIndex).deltaX) > 0.5F !=
+                Math.abs(action.analogData.get(dataIndex).x) > 0.5F ||
+                Math.abs(action.analogData.get(dataIndex).y - action.analogData.get(dataIndex).deltaY) > 0.5F !=
+                    Math.abs(action.analogData.get(dataIndex).y) > 0.5F;
             if (changed) {
                 if (on) {
-                    action.digitalData.get(index).toggle = !action.digitalData.get(index).toggle;
-                    action.digitalData.get(index).doublePress =
-                        System.nanoTime() - action.digitalData.get(index).lastChange > 250_000_000L;
+                    action.digitalData.get(dataIndex).toggle = !action.digitalData.get(dataIndex).toggle;
+                    action.digitalData.get(dataIndex).doublePress =
+                        System.nanoTime() - action.digitalData.get(dataIndex).lastChange > 250_000_000L;
                 } else {
-                    action.digitalData.get(index).longPress =
-                        System.nanoTime() - action.digitalData.get(index).lastChange > 500_000_000L;
+                    action.digitalData.get(dataIndex).longPress =
+                        System.nanoTime() - action.digitalData.get(dataIndex).lastChange > 500_000_000L;
                 }
-                action.digitalData.get(index).lastChange = System.nanoTime();
+                action.digitalData.get(dataIndex).lastChange = System.nanoTime();
             } else if (on) {
-                action.digitalData.get(index).hold =
-                    System.nanoTime() - action.digitalData.get(index).lastChange > 500_000_000L;
+                action.digitalData.get(dataIndex).hold =
+                    System.nanoTime() - action.digitalData.get(dataIndex).lastChange > 500_000_000L;
             }
 
-            action.digitalData.get(index).state = on;
-            action.digitalData.get(index).isActive = state.isActive();
-            action.digitalData.get(index).isChanged = changed;
-            action.digitalData.get(index).activeOrigin = getOrigins(action).getFirst();
-            action.digitalData.get(index).type = handedAction.action();
-            action.digitalData.get(index).hand = handedAction.hand();
+            action.digitalData.get(dataIndex).state = on;
+            action.digitalData.get(dataIndex).isActive = state.isActive();
+            action.digitalData.get(dataIndex).isChanged = changed;
+            action.digitalData.get(dataIndex).activeOrigin = getOrigins(handedAction, action).getFirst();
+            action.digitalData.get(dataIndex).type = handedAction.action();
+            action.digitalData.get(dataIndex).hand = handedAction.hand();
+            action.digitalData.get(dataIndex).path = handedAction.path();
         }
     }
 
@@ -1253,7 +1271,8 @@ public class MCOpenXR extends MCVR<XRInputAction> {
                                 headsetPath,
                                 handle,
                                 source.path().contains("/left/") ? ControllerType.LEFT : ControllerType.RIGHT,
-                                buttonType
+                                buttonType,
+                                source.path()
                             );
 
                             inputAction.setType(action.type());
@@ -1267,6 +1286,49 @@ public class MCOpenXR extends MCVR<XRInputAction> {
                                 new XrAction(handle, new XrActionSet(this.actionSetHandles.get(inputAction.actionSet), this.instance)),
                                 getPath(source.path())
                             ));
+                        }
+                    }
+
+                    if (set.getValue().chords() != null) {
+                        for (Chord chord : set.getValue().chords()) {
+                            if (chord == null || chord.inputs() == null || chord.inputs().isEmpty()) continue;
+
+                            String output = chord.output();
+                            if (output != null && !output.startsWith("/")) {
+                                output = "/actions/" + set.getKey() + "/in/" + output;
+                            }
+                            XRInputAction inputAction = this.getInputActionByName(output);
+                            if (inputAction == null) {
+                                VRSettings.LOGGER.warn("Chord output action '{}' not found", output);
+                                continue;
+                            }
+
+                            List<String> requiredPaths = new ArrayList<>();
+                            for (List<String> input : chord.inputs()) {
+                                if (input == null || input.isEmpty()) continue;
+                                String path = input.get(0);
+                                requiredPaths.add(path);
+
+                                Long handle = this.mappedBindings.get(new ActionBind(inputAction.actionSet, path));
+                                if (handle == null) {
+                                    VRSettings.LOGGER.error("Cannot find chord button for path {}, are you sure this is the correct path?", path);
+                                    continue;
+                                }
+
+                                ActionType buttonType = ControllerMapping.getMapping(headsetPath).get(path);
+                                inputAction.addHandle(
+                                    headsetPath,
+                                    handle,
+                                    path.contains("/left/") ? ControllerType.LEFT : ControllerType.RIGHT,
+                                    buttonType,
+                                    path
+                                );
+                                bindingList.add(new Pair<>(
+                                    new XrAction(handle, new XrActionSet(this.actionSetHandles.get(inputAction.actionSet), this.instance)),
+                                    getPath(path)
+                                ));
+                            }
+                            inputAction.addChord(requiredPaths);
                         }
                     }
 
