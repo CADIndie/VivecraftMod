@@ -22,7 +22,9 @@ public class XRInputAction extends InputAction {
     private boolean chordChanged;
     public int activeAction;
 
-    public record HandedAction(Long handle, ControllerType hand, ActionType action, String path, int dataIndex) {}
+    public record HandedAction(
+        Long handle, ControllerType hand, ActionType action, ActionType bindingType, String path, int dataIndex)
+    {}
 
     public final List<DigitalData> digitalData = new ArrayList<>();
     public final List<AnalogData> analogData = new ArrayList<>();
@@ -42,11 +44,13 @@ public class XRInputAction extends InputAction {
         return handles.getOrDefault(controller, List.of());
     }
 
-    public void addHandle(String controller, Long handle, ControllerType hand, ActionType actionType, String path) {
+    public void addHandle(
+        String controller, Long handle, ControllerType hand, ActionType actionType, ActionType bindingType, String path)
+    {
         if (!handles.containsKey(controller)) {
             var list = new ArrayList<HandedAction>();
             int dataIndex = this.digitalData.size();
-            list.add(new HandedAction(handle, hand, actionType, path, dataIndex));
+            list.add(new HandedAction(handle, hand, actionType, bindingType, path, dataIndex));
             handles.put(controller, list);
             this.analogData.add(new AnalogData());
             this.digitalData.add(new DigitalData());
@@ -55,7 +59,7 @@ public class XRInputAction extends InputAction {
                 .anyMatch(existing -> existing.handle().equals(handle) && existing.path().equals(path));
             if (!duplicate) {
                 int dataIndex = this.digitalData.size();
-                handles.get(controller).add(new HandedAction(handle, hand, actionType, path, dataIndex));
+                handles.get(controller).add(new HandedAction(handle, hand, actionType, bindingType, path, dataIndex));
                 this.analogData.add(new AnalogData());
                 this.digitalData.add(new DigitalData());
             } else {
@@ -206,6 +210,7 @@ public class XRInputAction extends InputAction {
                         this.activeAction = i;
                         return true;
                     }
+                    continue;
                 }
                 case HOLD -> {
                     if (data.hold) {

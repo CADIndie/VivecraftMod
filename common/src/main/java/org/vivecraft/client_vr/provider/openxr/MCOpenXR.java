@@ -415,26 +415,11 @@ public class MCOpenXR extends MCVR<XRInputAction> {
             int error = XR10.xrGetActionStateBoolean(this.session, info, state);
             logError(error, "xrGetActionStateBoolean", action.name);
 
-            if (state.changedSinceLastSync()) {
-                if (state.currentState()) {
-                    action.digitalData.get(dataIndex).toggle = !action.digitalData.get(dataIndex).toggle;
-                    action.digitalData.get(dataIndex).doublePress =
-                        System.nanoTime() - action.digitalData.get(dataIndex).lastChange > 250_000_000L;
-                } else {
-                    action.digitalData.get(dataIndex).longPress =
-                        System.nanoTime() - action.digitalData.get(dataIndex).lastChange > 500_000_000L;
-                }
-                action.digitalData.get(dataIndex).lastChange = System.nanoTime();
-            } else if (state.currentState()) {
-                action.digitalData.get(dataIndex).hold =
-                    System.nanoTime() - action.digitalData.get(dataIndex).lastChange > 500_000_000L;
-            }
-
-            action.digitalData.get(dataIndex).state = state.currentState();
+            this.updateDigitalState(
+                action.digitalData.get(dataIndex), state.currentState(), state.changedSinceLastSync());
             action.digitalData.get(dataIndex).isActive = state.isActive();
-            action.digitalData.get(dataIndex).isChanged = state.changedSinceLastSync();
             action.digitalData.get(dataIndex).activeOrigin = getOrigins(handedAction, action).getFirst();
-            action.digitalData.get(dataIndex).type = handedAction.action();
+            action.digitalData.get(dataIndex).type = handedAction.bindingType();
             action.digitalData.get(dataIndex).hand = handedAction.hand();
             action.digitalData.get(dataIndex).path = handedAction.path();
 
@@ -472,26 +457,10 @@ public class MCOpenXR extends MCVR<XRInputAction> {
             boolean on = Math.abs(state.currentState()) > 0.5F;
             boolean changed =
                 Math.abs(action.analogData.get(dataIndex).x - action.analogData.get(dataIndex).deltaX) > 0.5F != on;
-            if (changed) {
-                if (on) {
-                    action.digitalData.get(dataIndex).toggle = !action.digitalData.get(dataIndex).toggle;
-                    action.digitalData.get(dataIndex).doublePress =
-                        System.nanoTime() - action.digitalData.get(dataIndex).lastChange > 250_000_000L;
-                } else {
-                    action.digitalData.get(dataIndex).longPress =
-                        System.nanoTime() - action.digitalData.get(dataIndex).lastChange > 500_000_000L;
-                }
-                action.digitalData.get(dataIndex).lastChange = System.nanoTime();
-            } else if (on) {
-                action.digitalData.get(dataIndex).hold =
-                    System.nanoTime() - action.digitalData.get(dataIndex).lastChange > 500_000_000L;
-            }
-
-            action.digitalData.get(dataIndex).state = on;
+            this.updateDigitalState(action.digitalData.get(dataIndex), on, changed);
             action.digitalData.get(dataIndex).isActive = state.isActive();
-            action.digitalData.get(dataIndex).isChanged = changed;
             action.digitalData.get(dataIndex).activeOrigin = getOrigins(handedAction, action).getFirst();
-            action.digitalData.get(dataIndex).type = handedAction.action();
+            action.digitalData.get(dataIndex).type = handedAction.bindingType();
             action.digitalData.get(dataIndex).hand = handedAction.hand();
             action.digitalData.get(dataIndex).path = handedAction.path();
         }
@@ -526,29 +495,33 @@ public class MCOpenXR extends MCVR<XRInputAction> {
                 Math.abs(action.analogData.get(dataIndex).x) > 0.5F ||
                 Math.abs(action.analogData.get(dataIndex).y - action.analogData.get(dataIndex).deltaY) > 0.5F !=
                     Math.abs(action.analogData.get(dataIndex).y) > 0.5F;
-            if (changed) {
-                if (on) {
-                    action.digitalData.get(dataIndex).toggle = !action.digitalData.get(dataIndex).toggle;
-                    action.digitalData.get(dataIndex).doublePress =
-                        System.nanoTime() - action.digitalData.get(dataIndex).lastChange > 250_000_000L;
-                } else {
-                    action.digitalData.get(dataIndex).longPress =
-                        System.nanoTime() - action.digitalData.get(dataIndex).lastChange > 500_000_000L;
-                }
-                action.digitalData.get(dataIndex).lastChange = System.nanoTime();
-            } else if (on) {
-                action.digitalData.get(dataIndex).hold =
-                    System.nanoTime() - action.digitalData.get(dataIndex).lastChange > 500_000_000L;
-            }
-
-            action.digitalData.get(dataIndex).state = on;
+            this.updateDigitalState(action.digitalData.get(dataIndex), on, changed);
             action.digitalData.get(dataIndex).isActive = state.isActive();
-            action.digitalData.get(dataIndex).isChanged = changed;
             action.digitalData.get(dataIndex).activeOrigin = getOrigins(handedAction, action).getFirst();
-            action.digitalData.get(dataIndex).type = handedAction.action();
+            action.digitalData.get(dataIndex).type = handedAction.bindingType();
             action.digitalData.get(dataIndex).hand = handedAction.hand();
             action.digitalData.get(dataIndex).path = handedAction.path();
         }
+    }
+
+    private void updateDigitalState(XRInputAction.DigitalData data, boolean state, boolean changed) {
+        long now = System.nanoTime();
+        boolean wasLongPress = data.longPress;
+
+        if (changed) {
+            if (state) {
+                data.toggle = !data.toggle;
+                data.doublePress = now - data.lastChange > 250_000_000L;
+            }
+            data.lastChange = now;
+        } else if (state && data.lastChange == 0L) {
+            data.lastChange = now;
+        }
+
+        data.longPress = state && now - data.lastChange > 500_000_000L;
+        data.hold = data.longPress;
+        data.state = state;
+        data.isChanged = changed || (!wasLongPress && data.longPress);
     }
 
     private void readPoseData(Long action, XrActionSet set) {
@@ -1272,6 +1245,7 @@ public class MCOpenXR extends MCVR<XRInputAction> {
                                 handle,
                                 source.path().contains("/left/") ? ControllerType.LEFT : ControllerType.RIGHT,
                                 buttonType,
+                                action.type(),
                                 source.path()
                             );
 
@@ -1320,6 +1294,7 @@ public class MCOpenXR extends MCVR<XRInputAction> {
                                     headsetPath,
                                     handle,
                                     path.contains("/left/") ? ControllerType.LEFT : ControllerType.RIGHT,
+                                    buttonType,
                                     buttonType,
                                     path
                                 );
