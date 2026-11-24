@@ -87,6 +87,8 @@
   "vivecraft.options.screen.controls": "Controller Settings",
   "vivecraft.options.screen.keyboard": "Keyboard Settings",
   "vivecraft.options.screen.bindings": "Controller Bindings",
+  "vivecraft.options.OPENVR_CUSTOM_BINDINGS": "Use custom Vivecraft profile in OpenVR",
+  "vivecraft.options.OPENVR_CUSTOM_BINDINGS.tooltip": "Use the selected custom Vivecraft binding profile in OpenVR. When disabled, controller-specific Vivecraft default bindings are used.\nRequires restarting VR to take effect.",
   "_comment4": "Buttons that lead to the screen",
   "vivecraft.options.screen.main.button": "VR Settings...",
   "vivecraft.options.screen.gui.button": "HUD and GUI Settings...",

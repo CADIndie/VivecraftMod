@@ -84,28 +84,28 @@ public record BindingProfile(
     public static BindingProfile getDefaultBinding(String Headset) throws FileNotFoundException {
         switch (Headset) {
             case "/interaction_profiles/htc/vive_cosmos_controller" -> {
-                return GSON.fromJson(FileUtils.loadAssetToString("input/cosmos_defaults.json", true), BindingProfile.class);
+                return GSON.fromJson(FileUtils.loadAssetToString("input/profiles/cosmos_defaults.json", true), BindingProfile.class);
             }
             case "/interaction_profiles/htc/vive_controller" -> {
-                return GSON.fromJson(FileUtils.loadAssetToString("input/vive_defaults.json", true), BindingProfile.class);
+                return GSON.fromJson(FileUtils.loadAssetToString("input/profiles/vive_defaults.json", true), BindingProfile.class);
             }
             case "/interaction_profiles/valve/index_controller" -> {
-                return GSON.fromJson(FileUtils.loadAssetToString("input/knuckles_defaults.json", true), BindingProfile.class);
+                return GSON.fromJson(FileUtils.loadAssetToString("input/profiles/knuckles_defaults.json", true), BindingProfile.class);
             }
             case "/interaction_profiles/oculus/touch_controller" -> {
-                return GSON.fromJson(FileUtils.loadAssetToString("input/oculus_defaults.json", true), BindingProfile.class);
+                return GSON.fromJson(FileUtils.loadAssetToString("input/profiles/oculus_defaults.json", true), BindingProfile.class);
             }
             case "/interaction_profiles/bytedance/pico4_controller" -> {
-                return GSON.fromJson(FileUtils.loadAssetToString("input/pico4_defaults.json", true), BindingProfile.class);
+                return GSON.fromJson(FileUtils.loadAssetToString("input/profiles/pico4_defaults.json", true), BindingProfile.class);
             }
             case "/interaction_profiles/bytedance/pico_neo3_controller" -> {
-                return GSON.fromJson(FileUtils.loadAssetToString("input/pico_neo3_defaults.json", true), BindingProfile.class);
+                return GSON.fromJson(FileUtils.loadAssetToString("input/profiles/pico_neo3_defaults.json", true), BindingProfile.class);
             }
             case "/interaction_profiles/microsoft/motion_controller" -> {
-                return GSON.fromJson(FileUtils.loadAssetToString("input/wmr_defaults.json", true), BindingProfile.class);
+                return GSON.fromJson(FileUtils.loadAssetToString("input/profiles/wmr_defaults.json", true), BindingProfile.class);
             }
             default -> {
-                return GSON.fromJson(FileUtils.loadAssetToString("input/simple_defaults.json", true), BindingProfile.class);
+                return GSON.fromJson(FileUtils.loadAssetToString("input/profiles/simple_defaults.json", true), BindingProfile.class);
             }
         }
     }

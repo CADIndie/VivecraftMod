@@ -9,6 +9,7 @@ import net.minecraft.client.gui.narration.NarratableEntry;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.vivecraft.client.gui.framework.screens.GuiGroupedListEditorScreen;
+import org.vivecraft.client_vr.ClientDataHolderVR;
 import org.vivecraft.client_vr.provider.control.ActionSet;
 import org.vivecraft.client_vr.provider.control.Source;
 import org.vivecraft.client_vr.provider.openxr.MCOpenXR;
@@ -54,7 +55,8 @@ public class GuiBindings extends GuiGroupedListEditorScreen<Source> {
                 );
 
                 if (profile.saveProfile()) {
-                    // TODO success message
+                    ClientDataHolderVR.getInstance().vrSettings.currentBindingProfile = profile.name();
+                    ClientDataHolderVR.getInstance().vrSettings.saveOptions();
                 } else {
                     // TODO error message
                 }

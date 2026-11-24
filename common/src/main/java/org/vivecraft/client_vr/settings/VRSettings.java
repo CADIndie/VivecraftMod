@@ -274,6 +274,8 @@ public class VRSettings {
     // Control
     @SettingField()
     public String currentBindingProfile = "Custom Bindings";
+    @SettingField(VrOptions.OPENVR_CUSTOM_BINDINGS)
+    public boolean useCustomOpenVRBindings = false;
     @SettingField(VrOptions.REVERSE_HANDS)
     public boolean reverseHands = false;
     @SettingField(VrOptions.REVERSE_BOW)
@@ -2485,6 +2487,7 @@ public class VRSettings {
         SEATED_FREE_MOVE("vivecraft.options.freemove", "vivecraft.options.teleport"), // Movement Type
         FORCE_STANDING_FREE_MOVE(LangHelper.YES_KEY, LangHelper.NO_KEY), // Force Free Move
         ALLOW_ADVANCED_BINDINGS(LangHelper.YES_KEY, LangHelper.NO_KEY), // Show Advanced Bindings
+        OPENVR_CUSTOM_BINDINGS(OptionType.BOOLEAN), // use Vivecraft binding profiles for OpenVR
         MENU_WORLD_SELECTION { // Worlds
 
             @Override
@@ -3114,4 +3117,3 @@ public class VRSettings {
         }
     }
 }
-

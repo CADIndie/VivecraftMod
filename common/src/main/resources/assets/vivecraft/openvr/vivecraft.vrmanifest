@@ -3,6 +3,7 @@
   "applications": [
     {
       "app_key": "org.jrbudda.vivecraft.steamvrinput",
+      "action_manifest_path": "input/action_manifest.json",
       "image_path": "https://i1.wp.com/www.vivecraft.org/wp-content/uploads/2016/07/wesYwME.png",
       "launch_type": "url",
       "url": "steam://launch/",

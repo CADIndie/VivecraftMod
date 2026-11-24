@@ -3,6 +3,8 @@ package org.vivecraft.client_vr.provider.openvr_lwjgl;
 import com.google.common.collect.ImmutableMap;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.sun.jna.NativeLibrary;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
@@ -28,9 +30,14 @@ import org.vivecraft.client_vr.VRState;
 import org.vivecraft.client_vr.gameplay.screenhandlers.KeyboardHandler;
 import org.vivecraft.client_vr.gameplay.screenhandlers.RadialHandler;
 import org.vivecraft.client_vr.provider.*;
+import org.vivecraft.client_vr.provider.control.Action;
+import org.vivecraft.client_vr.provider.control.ActionSet;
 import org.vivecraft.client_vr.provider.control.ActionType;
+import org.vivecraft.client_vr.provider.control.BindingProfile;
+import org.vivecraft.client_vr.provider.control.Chord;
 import org.vivecraft.client_vr.provider.control.ControllerType;
 import org.vivecraft.client_vr.provider.control.InputAction;
+import org.vivecraft.client_vr.provider.control.Source;
 import org.vivecraft.client_vr.provider.control.VRInputActionSet;
 import org.vivecraft.client_vr.provider.openvr_lwjgl.control.VRInputAction;
 import org.vivecraft.client_vr.render.RenderConfigException;
@@ -39,10 +46,7 @@ import org.vivecraft.client_vr.utils.external.jinfinadeck;
 import org.vivecraft.client_vr.utils.external.jkatvr;
 import org.vivecraft.common.utils.MathUtils;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.FileReader;
-import java.io.OutputStreamWriter;
+import java.io.*;
 import java.lang.Math;
 import java.lang.management.ManagementFactory;
 import java.lang.reflect.Field;
@@ -678,28 +682,74 @@ public class MCOpenVR extends MCVR<VRInputAction> {
                 .put("controller_type", type)
                 .put("binding_url", url).build());
 
-        defaultsAdder.accept("vive_controller", "vive_defaults.json");
-        defaultsAdder.accept("oculus_touch", "oculus_defaults.json");
-        defaultsAdder.accept("holographic_controller", "wmr_defaults.json");
-        defaultsAdder.accept("knuckles", "knuckles_defaults.json");
-        defaultsAdder.accept("vive_cosmos_controller", "cosmos_defaults.json");
-        defaultsAdder.accept("vive_tracker_camera", "tracker_defaults.json");
-        defaultsAdder.accept("vive_tracker_waist", "tracker_waist_defaults.json");
-        defaultsAdder.accept("vive_tracker_left_foot", "tracker_left_foot_defaults.json");
-        defaultsAdder.accept("vive_tracker_right_foot", "tracker_right_foot_defaults.json");
-        defaultsAdder.accept("vive_tracker_left_elbow", "tracker_left_elbow_defaults.json");
-        defaultsAdder.accept("vive_tracker_right_elbow", "tracker_right_elbow_defaults.json");
-        defaultsAdder.accept("vive_tracker_left_knee", "tracker_left_knee_defaults.json");
-        defaultsAdder.accept("vive_tracker_right_knee", "tracker_right_knee_defaults.json");
+        boolean customBindingsLoaded = false;
+        if (this.dh.vrSettings.useCustomOpenVRBindings) {
+            try {
+                BindingProfile profile = BindingProfile.getCurrentProfile();
+                if (profile != null && profile.sets() != null && !profile.sets().isEmpty()) {
+                    String controllerType = profile.controller_paths() == null ?
+                        null : profile.controller_paths().openvr();
+                    if (controllerType != null && !controllerType.isBlank()) {
+                        if (Set.of(
+                            "vive_controller", "oculus_touch", "holographic_controller", "knuckles",
+                            "vive_cosmos_controller").contains(controllerType))
+                        {
+                            File bindingFile = this.writeCustomOpenVRBindings(profile, controllerType);
+                            defaultsAdder.accept(controllerType, "profiles/" + bindingFile.getName());
+                            customBindingsLoaded = true;
+                        } else {
+                            VRSettings.LOGGER.warn(
+                                "Selected profile '{}' targets unsupported OpenVR controller type '{}'",
+                                profile.name(), controllerType);
+                        }
+                    } else {
+                        for (String type : List.of(
+                            "vive_controller", "oculus_touch", "holographic_controller", "knuckles",
+                            "vive_cosmos_controller"))
+                        {
+                            File bindingFile = this.writeCustomOpenVRBindings(profile, type);
+                            defaultsAdder.accept(type, "profiles/" + bindingFile.getName());
+                        }
+                        customBindingsLoaded = true;
+                    }
+                    if (customBindingsLoaded) {
+                        VRSettings.LOGGER.info("Using Vivecraft profile '{}' for OpenVR bindings", profile.name());
+                    }
+                } else {
+                    VRSettings.LOGGER.error(
+                        "Custom OpenVR bindings are enabled, but selected profile '{}' is missing or has no binding sets",
+                        this.dh.vrSettings.currentBindingProfile);
+                }
+            } catch (FileNotFoundException e) {
+                VRSettings.LOGGER.error("Failed to load selected custom OpenVR binding profile", e);
+            } catch (IOException e) {
+                VRSettings.LOGGER.error("Failed to generate custom OpenVR binding file", e);
+            } catch (com.google.gson.JsonParseException e) {
+                VRSettings.LOGGER.error("Selected custom OpenVR binding profile is invalid", e);
+            }
+        }
+
+        if (!customBindingsLoaded) {
+            if (this.dh.vrSettings.useCustomOpenVRBindings) {
+                VRSettings.LOGGER.warn(
+                    "No usable selected OpenVR binding profile found; using controller-specific Vivecraft defaults");
+            }
+            this.addConvertedDefaultBindings(defaultsAdder);
+        }
+        defaultsAdder.accept("vive_tracker_camera", "profiles/tracker_defaults.json");
 
         map.put("default_bindings", defaults);
 
         // write action manifest to disk
         try {
-            (new File("input/profiles")).mkdirs();
+            File actionManifest = new File("openvr/input/action_manifest.json");
+            File actionManifestDirectory = actionManifest.getParentFile();
+            if (!actionManifestDirectory.exists() && !actionManifestDirectory.mkdirs()) {
+                throw new IOException("Failed to create OpenVR input directory");
+            }
 
             try (OutputStreamWriter outputstreamwriter = new OutputStreamWriter(
-                new FileOutputStream("input/action_manifest.json"), StandardCharsets.UTF_8))
+                new FileOutputStream(actionManifest), StandardCharsets.UTF_8))
             {
                 this.GSON.toJson(map, outputstreamwriter);
             }
@@ -710,14 +760,291 @@ public class MCOpenVR extends MCVR<VRInputAction> {
         // write defaults to disk
         String rev = this.dh.vrSettings.reverseHands ? "_reversed" : "";
         // controllers
-        FileUtils.unpackAsset("input/vive_defaults" + rev + ".json", "input/profiles/vive_defaults.json", false);
-        FileUtils.unpackAsset("input/oculus_defaults" + rev + ".json", "input/profiles/oculus_defaults.json", false);
-        FileUtils.unpackAsset("input/wmr_defaults" + rev + ".json", "input/profiles/wmr_defaults.json", false);
-        FileUtils.unpackAsset("input/knuckles_defaults" + rev + ".json", "input/profiles/knuckles_defaults.json", false);
-        FileUtils.unpackAsset("input/cosmos_defaults" + rev + ".json", "input/profiles/cosmos_defaults.json", false);
+        FileUtils.unpackAsset("input/profiles/vive_defaults" + rev + ".json", "input/profiles/vive_defaults.json", false);
+        FileUtils.unpackAsset("input/profiles/oculus_defaults" + rev + ".json", "input/profiles/oculus_defaults.json", false);
+        FileUtils.unpackAsset("input/profiles/wmr_defaults" + rev + ".json", "input/profiles/wmr_defaults.json", false);
+        FileUtils.unpackAsset("input/profiles/knuckles_defaults" + rev + ".json", "input/profiles/knuckles_defaults.json", false);
+        FileUtils.unpackAsset("input/profiles/cosmos_defaults" + rev + ".json", "input/profiles/cosmos_defaults.json", false);
 
         // camera tracker
-        FileUtils.unpackAsset("input/tracker_defaults.json", "input/profiles/tracker_defaults.json", false);
+        FileUtils.unpackAsset("input/profiles/tracker_defaults.json", "input/profiles/tracker_defaults.json", false);
+
+    }
+
+    private void addConvertedDefaultBindings(BiConsumer<String, String> defaultsAdder) {
+        String reverseHands = this.dh.vrSettings.reverseHands ? "_reversed" : "";
+        Map<String, String> profileByController = new LinkedHashMap<>();
+        profileByController.put("vive_controller", "vive");
+        profileByController.put("oculus_touch", "oculus");
+        profileByController.put("holographic_controller", "wmr");
+        profileByController.put("knuckles", "knuckles");
+        profileByController.put("vive_cosmos_controller", "cosmos");
+        for (Map.Entry<String, String> entry : profileByController.entrySet()) {
+            String controllerType = entry.getKey();
+            String bindingFileName = "vivecraft_default_" + controllerType + ".json";
+            try {
+                this.writeOpenVRDefaultBindings(
+                    entry.getValue() + "_defaults" + reverseHands + ".json", bindingFileName, controllerType);
+                defaultsAdder.accept(controllerType, "profiles/" + bindingFileName);
+            } catch (IOException | com.google.gson.JsonParseException e) {
+                VRSettings.LOGGER.error(
+                    "Failed to load or convert Vivecraft default bindings for {}", controllerType, e);
+                String steamVRDefault = switch (controllerType) {
+                    case "vive_controller" -> "vive_defaults.json";
+                    case "oculus_touch" -> "oculus_defaults.json";
+                    case "holographic_controller" -> "wmr_defaults.json";
+                    case "knuckles" -> "knuckles_defaults.json";
+                    case "vive_cosmos_controller" -> "cosmos_defaults.json";
+                    default -> throw new IllegalStateException("Unexpected controller type " + controllerType);
+                };
+                try {
+                    File fallbackFile = this.copyOpenVRDefaultBinding(steamVRDefault);
+                    defaultsAdder.accept(controllerType, "profiles/" + fallbackFile.getName());
+                } catch (IOException copyException) {
+                    e.addSuppressed(copyException);
+                    VRSettings.LOGGER.error("Failed to prepare SteamVR fallback bindings for {}", controllerType, e);
+                }
+            }
+        }
+    }
+
+    private File writeCustomOpenVRBindings(BindingProfile profile, String controllerType) throws IOException {
+        return this.writeOpenVRBindings(
+            profile, "vivecraft_custom_bindings_" + controllerType + ".json", controllerType);
+    }
+
+    private File writeOpenVRDefaultBindings(
+        String profileFileName, String outputFileName, String controllerType) throws IOException
+    {
+        String profileJson = FileUtils.loadAssetToString("input/profiles/" + profileFileName, false);
+        if (profileJson == null) {
+            throw new IOException("Default binding profile is missing: " + profileFileName);
+        }
+        JsonObject profileObject = JsonParser.parseString(profileJson).getAsJsonObject();
+        if (profileObject.has("sets")) {
+            BindingProfile profile = this.GSON.fromJson(profileObject, BindingProfile.class);
+            if (profile == null || profile.sets() == null || profile.sets().isEmpty()) {
+                throw new IOException("Default profile has no binding sets");
+            }
+            return this.writeOpenVRBindings(profile, outputFileName, controllerType);
+        }
+        if (profileObject.has("bindings")) {
+            File output = this.getOpenVRBindingOutput(outputFileName);
+            try (OutputStreamWriter writer = new OutputStreamWriter(
+                new FileOutputStream(output), StandardCharsets.UTF_8))
+            {
+                this.GSON.toJson(profileObject, writer);
+            }
+            return output;
+        }
+        throw new IOException("Default profile is neither Vivecraft nor OpenVR binding format");
+    }
+
+    private File copyOpenVRDefaultBinding(String assetFileName) throws IOException {
+        String content = FileUtils.loadAssetToString("input/profiles/" + assetFileName, false);
+        if (content == null) {
+            throw new IOException("SteamVR default binding is missing: " + assetFileName);
+        }
+        JsonObject binding = JsonParser.parseString(content).getAsJsonObject();
+        if (!binding.has("bindings")) {
+            throw new IOException("SteamVR default binding has no bindings: " + assetFileName);
+        }
+        File output = this.getOpenVRBindingOutput(assetFileName);
+        try (OutputStreamWriter writer = new OutputStreamWriter(
+            new FileOutputStream(output), StandardCharsets.UTF_8))
+        {
+            this.GSON.toJson(binding, writer);
+        }
+        return output;
+    }
+
+    private File writeOpenVRBindings(BindingProfile profile, String fileName, String controllerType) throws IOException {
+        Map<String, List<Map<String, Object>>> sourcesBySet = new LinkedHashMap<>();
+        Map<String, List<Map<String, Object>>> chordsBySet = new LinkedHashMap<>();
+        for (Map.Entry<String, ActionSet> entry : profile.sets().entrySet()) {
+            String profileActionSetPath = entry.getKey().startsWith("/") ? entry.getKey() :
+                "/actions/" + entry.getKey();
+            ActionSet actionSet = entry.getValue();
+            if (actionSet == null) continue;
+
+            if (actionSet.sources() != null) {
+                for (Source source : actionSet.sources()) {
+                    if (source == null || source.path() == null || source.inputs() == null) continue;
+                    for (Action action : source.inputs()) {
+                        if (action == null || action.action() == null || action.type() == null) continue;
+                        String outputPath = normalizeOpenVRActionPath(profileActionSetPath, action.action());
+                        int actionMarker = outputPath.lastIndexOf("/in/");
+                        if (actionMarker < 0) {
+                            VRSettings.LOGGER.warn("Skipping OpenVR binding with invalid action path '{}'", outputPath);
+                            continue;
+                        }
+                        String outputSetPath = outputPath.substring(0, actionMarker);
+                        List<Map<String, Object>> sources =
+                            sourcesBySet.computeIfAbsent(outputSetPath, key -> new ArrayList<>());
+                        addCustomOpenVRSource(sources, outputPath, source, action);
+                    }
+                }
+            }
+
+            if (actionSet.chords() != null && !actionSet.chords().isEmpty()) {
+                for (Chord chord : actionSet.chords()) {
+                    if (chord == null || chord.inputs() == null || chord.output() == null) continue;
+                    String outputPath = normalizeOpenVRActionPath(profileActionSetPath, chord.output());
+                    int actionMarker = outputPath.lastIndexOf("/in/");
+                    if (actionMarker < 0) {
+                        VRSettings.LOGGER.warn("Skipping OpenVR chord with invalid action path '{}'", outputPath);
+                        continue;
+                    }
+                    String outputSetPath = outputPath.substring(0, actionMarker);
+                    List<List<String>> chordInputs = convertOpenVRChordInputs(chord.inputs());
+                    if (chordInputs.size() < 2) {
+                        VRSettings.LOGGER.warn("Skipping OpenVR chord for '{}' with fewer than two valid inputs",
+                            outputPath);
+                        continue;
+                    }
+                    Map<String, Object> chordEntry = new LinkedHashMap<>();
+                    chordEntry.put("inputs", chordInputs);
+                    chordEntry.put("output", outputPath);
+                    chordsBySet.computeIfAbsent(outputSetPath, key -> new ArrayList<>()).add(chordEntry);
+                }
+            }
+        }
+        sourcesBySet.entrySet().removeIf(entry -> entry.getValue().isEmpty());
+        if (sourcesBySet.isEmpty() && chordsBySet.isEmpty()) {
+            throw new IOException("Selected binding profile contains no usable bindings");
+        }
+
+        Map<String, Object> bindings = new LinkedHashMap<>();
+        Set<String> actionSetPaths = new LinkedHashSet<>(sourcesBySet.keySet());
+        actionSetPaths.addAll(chordsBySet.keySet());
+        actionSetPaths.add(VRInputActionSet.GLOBAL.name);
+        for (String actionSetPath : actionSetPaths) {
+            Map<String, Object> setBindings = new LinkedHashMap<>();
+            setBindings.put("sources", sourcesBySet.getOrDefault(actionSetPath, List.of()));
+            List<Map<String, Object>> chords = chordsBySet.get(actionSetPath);
+            if (chords != null && !chords.isEmpty()) setBindings.put("chords", chords);
+            if (actionSetPath.equals(VRInputActionSet.GLOBAL.name)) {
+                setBindings.put("poses", List.of(
+                    Map.of("output", ACTION_LEFT_HAND, "path", "/user/hand/left/pose/raw"),
+                    Map.of("output", ACTION_RIGHT_HAND, "path", "/user/hand/right/pose/raw")
+                ));
+                setBindings.put("haptics", List.of(
+                    Map.of("output", ACTION_LEFT_HAPTIC, "path", "/user/hand/left/output/haptic"),
+                    Map.of("output", ACTION_RIGHT_HAPTIC, "path", "/user/hand/right/output/haptic")
+                ));
+            }
+            bindings.put(actionSetPath, setBindings);
+        }
+
+        Map<String, Object> root = new LinkedHashMap<>();
+        root.put("action_manifest_version", 0);
+        root.put("alias_info", Map.of());
+        root.put("app_key", "org.jrbudda.vivecraft.steamvrinput");
+        root.put("bindings", bindings);
+        root.put("category", "steamvr_input");
+        root.put("controller_type", controllerType);
+        root.put("description", profile.description() == null ? "" : profile.description());
+        root.put("name", profile.name() == null ? "Vivecraft Bindings" : profile.name());
+        root.put("options", Map.of());
+        root.put("simulated_actions", List.of());
+
+        File output = this.getOpenVRBindingOutput(fileName);
+        try (OutputStreamWriter writer = new OutputStreamWriter(
+            new FileOutputStream(output), StandardCharsets.UTF_8))
+        {
+            this.GSON.toJson(root, writer);
+        }
+        return output;
+    }
+
+    private File getOpenVRBindingOutput(String fileName) throws IOException {
+        File profilesDirectory = new File("openvr/input/profiles");
+        if (!profilesDirectory.exists() && !profilesDirectory.mkdirs()) {
+            throw new IOException("Failed to create OpenVR profiles directory");
+        }
+        return new File(profilesDirectory, fileName);
+    }
+
+    private void addCustomOpenVRSource(
+        List<Map<String, Object>> sources, String outputPath, Source source, Action action)
+    {
+        String path = source.path();
+        int inputMarker = path.indexOf("/input/");
+        if (inputMarker < 0) {
+            VRSettings.LOGGER.warn("Skipping OpenVR binding with invalid input path '{}'", path);
+            return;
+        }
+
+        String inputPath = path.substring(inputMarker + "/input/".length());
+        String[] parts = inputPath.split("/");
+        if (parts.length == 0) return;
+        String component = parts[0];
+        String suffix = parts.length > 1 ? parts[parts.length - 1] : "";
+
+        String mode = switch (component) {
+            case "trigger" -> "trigger";
+            case "squeeze", "grip" -> "grab";
+            case "thumbstick" -> "joystick";
+            case "trackpad" -> "trackpad";
+            default -> "button";
+        };
+        String inputType = action.type() == ActionType.LONG_PRESS ? "long" : switch (suffix) {
+            case "click" -> "click";
+            case "touch" -> "touch";
+            case "long" -> "long";
+            case "x" -> "east";
+            case "y" -> "north";
+            case "value" -> action.type() == ActionType.VEC1 ? "pull" : "click";
+            default -> switch (action.type()) {
+                case VEC1 -> "pull";
+                case VEC2 -> "position";
+                default -> "click";
+            };
+        };
+        if (action.type() == ActionType.VEC2 &&
+            (component.equals("thumbstick") || component.equals("trackpad")))
+        {
+            inputType = "position";
+        }
+
+        String basePath = path.substring(0, inputMarker + "/input/".length()) + component;
+        String openVRPath = new Source(List.of(), Map.of(), basePath).getOpenVRPath("position");
+        Map<String, Object> output = Map.of("output", outputPath);
+        Map<String, Object> sourceEntry = new LinkedHashMap<>();
+        sourceEntry.put("inputs", Map.of(inputType, output));
+        sourceEntry.put("mode", mode);
+        if (source.parameters() != null && !source.parameters().isEmpty()) {
+            sourceEntry.put("parameters", source.parameters());
+        }
+        sourceEntry.put("path", openVRPath);
+        sources.add(sourceEntry);
+    }
+
+    private List<List<String>> convertOpenVRChordInputs(List<List<String>> inputs) {
+        List<List<String>> converted = new ArrayList<>();
+        for (List<String> input : inputs) {
+            if (input == null || input.size() < 2 || input.get(0) == null || input.get(1) == null) continue;
+            String path = input.get(0);
+            int inputMarker = path.indexOf("/input/");
+            if (inputMarker < 0) {
+                VRSettings.LOGGER.warn("Skipping OpenVR chord input with invalid path '{}'", path);
+                continue;
+            }
+            String inputPath = path.substring(inputMarker + "/input/".length());
+            String component = inputPath.split("/")[0];
+            String basePath = path.substring(0, inputMarker + "/input/".length()) + component;
+            String openVRPath = new Source(List.of(), Map.of(), basePath).getOpenVRPath("position");
+            converted.add(List.of(openVRPath, input.get(1)));
+        }
+        return converted;
+    }
+
+    private String normalizeOpenVRActionPath(String actionSetPath, String actionName) {
+        if (actionName.startsWith("/actions/")) return actionName;
+        if (actionName.startsWith("in/")) return actionSetPath + "/" + actionName;
+        VRInputAction inputAction = this.getInputAction(actionName);
+        if (inputAction != null) return inputAction.name;
+        return actionSetPath + "/in/" + actionName;
     }
 
     /**
@@ -1070,7 +1397,7 @@ public class MCOpenVR extends MCVR<VRInputAction> {
      */
     private void installApplicationManifest(boolean force) throws RenderConfigException {
         File manifestFile = new File("openvr/vivecraft.vrmanifest");
-        FileUtils.unpackAsset("vivecraft.vrmanifest", "openvr/vivecraft.vrmanifest", true);
+        FileUtils.unpackAsset("openvr/vivecraft.vrmanifest", "openvr/vivecraft.vrmanifest", true);
 
         File customFile = new File("openvr/custom.vrmanifest");
         if (customFile.exists()) {
@@ -1189,7 +1516,7 @@ public class MCOpenVR extends MCVR<VRInputAction> {
      * @throws RenderConfigException if OpenVR throws any error, or the path is invalid
      */
     private void loadActionManifest() throws RenderConfigException {
-        String actionsPath = new File("input/action_manifest.json").getAbsolutePath();
+        String actionsPath = new File("openvr/input/action_manifest.json").getAbsolutePath();
         // check if path is valid for steamvr, since it would just silently fail
         checkPathValid(actionsPath, "Failed to install action manifest", false);
         int error = VRInput_SetActionManifestPath(actionsPath);
